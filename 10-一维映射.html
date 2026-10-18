@@ -1,0 +1,1270 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>第 10 章 · 一维映射 —— 非线性动力学与混沌</title>
+<style>
+/* ================= 0. 基础 ================= */
+:root{
+  --bg:#080b10; --bg2:#0e141d; --panel:#101822; --panel2:#0b1119;
+  --ink:#eee8dc; --ink2:#c3cad6; --mut:#8b95a4; --dim:#5c6775;
+  --gold:#e8b04b; --cyan:#62d0ff; --warm:#ff9770; --teal:#4fbfa8; --red:#d9534a;
+  --line:rgba(255,255,255,.10); --line2:rgba(255,255,255,.06);
+  --serif:"Source Han Serif SC","Noto Serif SC","Songti SC",SimSun,"STSong",serif;
+  --sans:"PingFang SC","HarmonyOS Sans SC","Microsoft YaHei","Hiragino Sans GB",system-ui,sans-serif;
+  --mono:"JetBrains Mono","Cascadia Code",Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--sans);
+  font-size:16px; line-height:1.85; overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4{font-family:var(--serif);font-weight:700;line-height:1.28;letter-spacing:.01em}
+em{font-style:normal;color:var(--gold)}
+::selection{background:rgba(232,176,75,.28)}
+
+/* ================= 1. 背景（全篇同一底色，只有缓慢呼吸的光） ================= */
+.bg{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.bg .orb{position:absolute;border-radius:50%;filter:blur(90px);opacity:.30;mix-blend-mode:screen}
+.bg .o1{width:52vw;height:52vw;left:-12vw;top:-14vw;
+  background:radial-gradient(circle,rgba(43,76,126,.9),transparent 66%);
+  animation:drift1 34s ease-in-out infinite alternate}
+.bg .o2{width:44vw;height:44vw;right:-10vw;bottom:-14vw;
+  background:radial-gradient(circle,rgba(150,62,44,.75),transparent 66%);
+  animation:drift2 42s ease-in-out infinite alternate}
+.bg .o3{width:30vw;height:30vw;left:44vw;top:38vh;opacity:.13;
+  background:radial-gradient(circle,rgba(232,176,75,.8),transparent 68%);
+  animation:drift1 28s ease-in-out infinite alternate-reverse}
+@keyframes drift1{from{transform:translate3d(0,0,0) scale(1)}to{transform:translate3d(4vw,3vh,0) scale(1.12)}}
+@keyframes drift2{from{transform:translate3d(0,0,0) scale(1.06)}to{transform:translate3d(-3vw,-4vh,0) scale(.96)}}
+.bg .mesh{position:absolute;inset:-10%;
+  background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);
+  background-size:72px 72px;
+  -webkit-mask-image:radial-gradient(62% 58% at 50% 45%,#000 20%,transparent 80%);
+  mask-image:radial-gradient(62% 58% at 50% 45%,#000 20%,transparent 80%);
+  animation:meshmove 60s linear infinite}
+@keyframes meshmove{to{transform:translate3d(-72px,-72px,0)}}
+
+/* ================= 2. 幻灯片容器 ================= */
+.deck{position:fixed;inset:0;z-index:2}
+.page{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  padding:clamp(24px,5vh,64px) clamp(20px,4vw,56px);
+  opacity:0;visibility:hidden;pointer-events:none;
+  transform:scale(1.015);filter:blur(7px);
+  transition:opacity .62s cubic-bezier(.4,0,.2,1),transform .72s cubic-bezier(.4,0,.2,1),
+             filter .62s cubic-bezier(.4,0,.2,1),visibility .62s;
+}
+.page.on{opacity:1;visibility:visible;transform:none;filter:none;pointer-events:auto;z-index:3}
+.page-inner{width:min(1140px,100%);max-height:100%;overflow:auto;overscroll-behavior:contain;
+  scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent}
+.page-inner::-webkit-scrollbar{width:6px}
+.page-inner::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:6px}
+
+/* 入场：逐级浮现（不是从下往上滑，而是轻微上浮+淡入） */
+.a{opacity:0;transform:translateY(16px);
+  transition:opacity .68s cubic-bezier(.2,.8,.3,1),transform .68s cubic-bezier(.2,.8,.3,1)}
+.page.on .a{opacity:1;transform:none}
+.page.on .a:nth-child(1){transition-delay:.05s}
+.page.on .a:nth-child(2){transition-delay:.11s}
+.page.on .a:nth-child(3){transition-delay:.17s}
+.page.on .a:nth-child(4){transition-delay:.23s}
+.page.on .a:nth-child(5){transition-delay:.29s}
+.page.on .a:nth-child(6){transition-delay:.35s}
+.page.on .a:nth-child(7){transition-delay:.41s}
+.page.on .a:nth-child(8){transition-delay:.47s}
+
+/* ================= 3. HUD ================= */
+.rail{position:fixed;top:0;left:0;height:2px;z-index:60;background:linear-gradient(90deg,var(--gold),var(--warm));
+  box-shadow:0 0 14px rgba(232,176,75,.55);transition:width .55s cubic-bezier(.4,0,.2,1)}
+.dots{position:fixed;right:clamp(12px,2vw,26px);top:50%;transform:translateY(-50%);z-index:60;
+  display:flex;flex-direction:column;gap:7px;align-items:flex-end}
+.dots button{appearance:none;border:0;background:transparent;padding:3px;cursor:pointer;display:flex;align-items:center;gap:8px}
+.dots i{display:block;width:14px;height:2px;background:rgba(255,255,255,.20);transition:.3s;border-radius:2px}
+.dots button:hover i{background:rgba(255,255,255,.45);width:20px}
+.dots button.on i{background:var(--gold);width:26px}
+.counter{position:fixed;right:clamp(12px,2vw,26px);bottom:18px;z-index:60;
+  font:600 11.5px/1 var(--mono);letter-spacing:.18em;color:var(--dim)}
+.counter b{color:var(--gold)}
+.where{position:fixed;left:clamp(14px,2.4vw,30px);bottom:18px;z-index:60;
+  font:500 11.5px/1.6 var(--sans);letter-spacing:.14em;color:var(--dim);
+  max-width:44vw;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.where b{color:var(--mut);font-weight:500}
+.tip{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:60;
+  font:500 11.5px/1 var(--sans);letter-spacing:.2em;color:var(--dim);
+  display:flex;align-items:center;gap:9px;transition:opacity .5s}
+.tip i{width:5px;height:5px;border-radius:50%;background:var(--gold);animation:blip 1.7s infinite}
+@keyframes blip{0%,100%{opacity:.25}50%{opacity:1}}
+.tip.hide{opacity:0;pointer-events:none}
+
+/* ================= 4. 版式组件 ================= */
+.kicker{font:600 10.5px/1 var(--sans);letter-spacing:.3em;color:var(--gold);
+  display:flex;align-items:center;gap:12px;margin-bottom:20px;text-transform:uppercase}
+.kicker::before{content:"";width:34px;height:1px;background:linear-gradient(90deg,var(--gold),transparent)}
+h2{font-size:clamp(24px,3.4vw,40px);color:#f4eee2;margin-bottom:18px;text-wrap:balance}
+.p{font-size:clamp(14.6px,1.15vw,16.4px);line-height:1.95;color:var(--ink2);margin-bottom:.95em}
+.p strong{color:#f6f1e5;font-weight:600;background:linear-gradient(transparent 64%,rgba(232,176,75,.30) 0);padding:0 1px}
+.p b{color:#f6f1e5}
+.pull{border-left:2px solid var(--gold);padding-left:18px;margin:22px 0;
+  font-family:var(--serif);font-size:clamp(15px,1.5vw,19px);line-height:1.8;color:#efe6d2}
+.pull cite{display:block;font-family:var(--sans);font-size:11.5px;color:var(--dim);font-style:normal;margin-top:8px;letter-spacing:.08em}
+.split{display:grid;grid-template-columns:1.06fr .94fr;gap:clamp(22px,4vw,60px);align-items:center}
+.split.rev{grid-template-columns:.94fr 1.06fr}
+.center{text-align:center}
+.fig{background:rgba(255,255,255,.028);border:1px solid var(--line2);border-radius:18px;padding:16px}
+.fig svg{display:block;width:100%;height:auto}
+.figcap{margin-top:10px;font-size:12px;line-height:1.7;color:var(--dim)}
+.card{background:rgba(255,255,255,.032);border:1px solid var(--line2);border-radius:16px;padding:20px 22px}
+.card h4{font-size:15.5px;color:#f2ecdf;margin-bottom:9px}
+.card p{font-size:13.6px;line-height:1.85;color:var(--mut)}
+.chips{display:flex;flex-wrap:wrap;gap:9px;margin-top:22px}
+.chips span{font-size:11.5px;letter-spacing:.08em;color:var(--mut);
+  border:1px solid var(--line);padding:6px 12px;border-radius:999px}
+
+/* 演示台 */
+.demo{background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.015));
+  border:1px solid var(--line);border-radius:18px;padding:14px;position:relative}
+.demo::before{content:"可玩";position:absolute;top:-9px;left:18px;font:600 9.5px/1 var(--sans);
+  letter-spacing:.24em;color:#0a0d12;background:var(--gold);padding:4px 8px;border-radius:4px}
+.demo canvas{display:block;width:100%;border-radius:12px;background:#05070b;touch-action:none;cursor:crosshair}
+.ctrls{display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin-top:12px}
+.chip{appearance:none;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.03);
+  color:#c3cbd8;font:500 11.5px/1 var(--mono);padding:7px 11px;border-radius:999px;cursor:pointer;transition:.18s}
+.chip:hover{background:rgba(255,255,255,.09);color:#fff}
+.chip.on{background:var(--gold);color:#0a0d12;border-color:var(--gold);font-weight:700}
+.btn{appearance:none;border:1px solid rgba(255,255,255,.18);background:transparent;color:#dfe6ef;
+  font:500 11.5px/1 var(--sans);padding:8px 13px;border-radius:8px;cursor:pointer;letter-spacing:.05em}
+.btn:hover{background:rgba(255,255,255,.08)}
+.slider{display:flex;align-items:center;gap:9px;font:500 11.5px/1 var(--mono);color:var(--mut)}
+.slider input[type=range]{appearance:none;width:clamp(100px,16vw,170px);height:3px;border-radius:3px;
+  background:rgba(255,255,255,.18);outline:none}
+.slider input[type=range]::-webkit-slider-thumb{appearance:none;width:12px;height:12px;border-radius:50%;
+  background:var(--gold);cursor:pointer;box-shadow:0 0 0 3px rgba(232,176,75,.2)}
+.slider b{color:var(--gold);font-weight:600;min-width:3.2em;display:inline-block}
+.readout{font:500 11.5px/1.7 var(--mono);color:var(--dim);margin-top:9px}
+.readout b{color:var(--teal);font-weight:600}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:9px;font:500 11px/1 var(--sans);color:var(--dim)}
+.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+
+/* 步骤文字（演示页右侧） */
+.steps{position:relative;min-height:clamp(240px,40vh,330px)}
+.step{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;
+  opacity:0;transform:translateY(14px);transition:opacity .5s,transform .5s;pointer-events:none}
+.step.on{opacity:1;transform:none;pointer-events:auto}
+.snum{font:700 10px/1 var(--mono);letter-spacing:.24em;color:var(--gold);margin-bottom:13px}
+.step h3{font-family:var(--serif);font-size:clamp(16px,1.85vw,22px);color:#f3eddf;margin-bottom:10px;line-height:1.5}
+.step p{font-size:13.8px;line-height:1.9;color:var(--mut)}
+.step p strong{color:#f0e7d5;font-weight:600}
+.sdots{display:flex;gap:6px;margin-top:18px}
+.sdots i{width:15px;height:2px;background:rgba(255,255,255,.16);transition:.3s}
+.sdots i.on{background:var(--gold);width:24px}
+
+/* 折叠 */
+details{border-radius:14px;overflow:hidden;border:1px solid var(--line2);background:rgba(255,255,255,.025)}
+details>summary{cursor:pointer;list-style:none;padding:13px 18px;font:600 13px/1.6 var(--sans);color:#e6dfd0;
+  display:flex;align-items:center;gap:10px}
+details>summary::-webkit-details-marker{display:none}
+details>summary::after{content:"+";margin-left:auto;color:var(--gold);font-weight:400;font-size:16px;transition:.3s}
+details[open]>summary::after{transform:rotate(45deg)}
+details .body{padding:0 20px 18px;font-size:13.6px;line-height:1.95;color:var(--mut)}
+details .body p{margin-bottom:.7em}
+details .body b{color:#f0e7d5}
+.tag{font:700 9.5px/1 var(--mono);letter-spacing:.14em;background:rgba(232,176,75,.16);
+  color:var(--gold);padding:4px 7px;border-radius:4px}
+.tag.blue{background:rgba(98,208,255,.14);color:var(--cyan)}
+.formula{display:block;text-align:center;font-family:var(--serif);font-size:16px;color:#f0e7d5;
+  padding:11px 8px;margin:11px 0;background:rgba(255,255,255,.04);border-radius:9px;letter-spacing:.01em}
+code{font:500 12.5px/1.4 var(--mono);background:rgba(255,255,255,.07);padding:2px 6px;border-radius:4px;color:#e7dfd0}
+
+/* 推导页 */
+.proofs{font-size:12.6px;line-height:1.9}
+.proofs .formula{font-size:14.5px;margin:9px 0;padding:9px 6px}
+@media(min-width:1180px){
+  .proofs{columns:2;column-gap:34px;column-rule:1px solid rgba(255,255,255,.07)}
+  .proofs>p,.proofs>.formula{break-inside:avoid}
+}
+.stepnum{color:var(--cyan);font-weight:700;font-family:var(--mono);font-size:12px;margin-right:6px}
+
+/* 章卡 */
+.map{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-top:20px}
+.mcard{background:rgba(255,255,255,.03);border:1px solid var(--line2);border-radius:12px;padding:12px 13px;
+  cursor:pointer;transition:.22s}
+.mcard:hover{background:rgba(255,255,255,.06);border-color:rgba(232,176,75,.45);transform:translateY(-2px)}
+.mcard .n{font:700 9.5px/1 var(--mono);color:var(--gold);letter-spacing:.14em}
+.mcard h5{font-family:var(--serif);font-size:14px;margin:7px 0 0;color:#f0eade;font-weight:700}
+.mcard .one{font-size:11.5px;color:var(--dim);line-height:1.6;margin-top:5px}
+.mcard.here{border-color:rgba(232,176,75,.6);background:rgba(232,176,75,.10)}
+
+/* 小测 */
+.qs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.q{background:rgba(255,255,255,.028);border:1px solid var(--line2);border-radius:13px;padding:14px 16px}
+.q .stem{font-size:13px;line-height:1.7;color:#ece5d7;margin-bottom:9px;font-weight:500}
+.opt{display:flex;gap:8px;align-items:flex-start;padding:7px 10px;border:1px solid var(--line2);
+  border-radius:8px;cursor:pointer;font-size:12.3px;line-height:1.6;color:#b9c2cf;margin-bottom:6px;transition:.16s}
+.opt:hover{background:rgba(255,255,255,.05)}
+.opt .k{font:700 10.5px/1.5 var(--mono);color:var(--dim);flex:none}
+.opt.right{border-color:rgba(79,191,168,.7);background:rgba(79,191,168,.12);color:#d8f5ec}
+.opt.wrong{border-color:rgba(217,83,74,.65);background:rgba(217,83,74,.12);color:#ffd7d2}
+.opt.locked{cursor:default}
+.fb{font-size:11.6px;line-height:1.7;color:var(--teal);margin-top:4px;display:none}
+.fb.show{display:block}
+.fb.bad{color:#ffb4a6}
+.score{display:flex;align-items:center;gap:16px;margin-top:14px;font-size:12.5px;color:var(--dim);flex-wrap:wrap}
+.score b{color:var(--gold);font-size:17px;font-family:var(--serif)}
+.done{display:flex;align-items:center;gap:12px;margin-top:12px;padding:11px 14px;
+  border:1px dashed rgba(79,191,168,.45);border-radius:12px;background:rgba(79,191,168,.06);cursor:pointer}
+.done input{appearance:none;width:20px;height:20px;border:2px solid var(--teal);border-radius:6px;
+  flex:none;cursor:pointer;position:relative;background:transparent}
+.done input:checked{background:var(--teal)}
+.done input:checked::after{content:"✓";position:absolute;inset:0;color:#08120f;font-size:13px;
+  display:flex;align-items:center;justify-content:center;font-weight:700}
+.done span{font-size:12.5px;color:#a9d9cf}
+
+/* ================= 5. 响应式 ================= */
+@media(max-width:980px){
+  .split,.split.rev{grid-template-columns:1fr;gap:20px}
+  .map{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .qs{grid-template-columns:1fr}
+  .dots{display:none}
+  .where{display:none}
+}
+@media(max-width:640px){
+  body{font-size:15px}
+  .page{padding:18px 16px}
+  .steps{min-height:0}
+  .step{position:static;opacity:1;transform:none;pointer-events:auto;margin-bottom:16px}
+  .step:last-child{margin-bottom:0}
+  .tip{display:none}
+}
+@media(prefers-reduced-motion:reduce){
+  .a{opacity:1;transform:none}
+  .bg .orb,.bg .mesh{animation:none}
+  .page{transition:opacity .2s}
+}
+
+/* 页脚角标：对应原书节号 */
+.pfoot{position:absolute;right:clamp(20px,4vw,56px);bottom:12px;font:11px/1 var(--mono);
+  color:var(--dim);opacity:.8;letter-spacing:.06em;pointer-events:none}
+</style>
+</head>
+<body>
+
+<div class="bg" aria-hidden="true">
+  <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+  <div class="mesh"></div>
+</div>
+
+<div class="rail" id="rail"></div>
+<nav class="dots" id="dots" aria-label="页面导航"></nav>
+<div class="where" id="where"></div>
+<div class="counter" id="counter"><b>01</b> / 24</div>
+<div class="tip" id="tip"><i></i>滚动滚轮 · 或按 ↓ / 空格 翻页</div>
+
+<main class="deck" id="deck">
+
+  <!-- ========== 01 封面 ========== -->
+  <section class="page" data-title="封面">
+    <div class="page-inner center">
+      <div class="a kicker" style="justify-content:center">第 10 章 · CHAPTER TEN</div>
+      <h2 class="a" style="font-size:clamp(28px,4.6vw,54px);line-height:1.18;color:#f6f1e6;margin:6px 0 0">
+        一条抛物线，<em>就能演出整部混沌</em>
+      </h2>
+      <p class="a p" style="max-width:44em;margin:24px auto 0;color:var(--mut)">
+        第 9 章把三维的流压成了一维的映射。这一章干脆只留映射本身——<br>
+        没有体积、没有相图、没有微分方程，只有一个递推式和一台计算器。</p>
+      <div class="a chips" style="justify-content:center;margin-top:28px">
+        <span>原书 第 10 章「一维映射」</span><span>约 55 分钟</span><span>2 个可玩演示</span><span>4 张数值图</span><span>2 个完整推导</span><span>5 道自测</span>
+      </div>
+    </div>
+    <div class="pfoot">—</div>
+  </section>
+
+  <!-- ========== 02 引言 ========== -->
+  <section class="page" data-title="为什么值得只看一个递推式">
+    <div class="page-inner">
+      <div class="a kicker">§10.0 引言 · 离散时间</div>
+      <h2 class="a">把时间掰成一格一格</h2>
+      <p class="a p">前三章的时间是连续的：解是一条曲线，轨道在相空间里流动。可有些系统的「时间」本来就是离散的——<strong>一年一代的虫口</strong>、<strong>一次一次的迭代算法</strong>、<strong>每转一圈打一个点的庞加莱映射</strong>（§8.7、§9.4）。</p>
+      <p class="a p">把这种系统写成递推式：<em>x</em><sub>n+1</sub> = <em>f</em>(<em>x</em><sub>n</sub>)。没有导数的概念，也就不需要相图；一个函数图像加上一条 45° 对角线，就能把所有信息画完（§10.1 的蛛网图）。</p>
+      <div class="split" style="margin-top:16px;gap:14px">
+        <div class="a card" style="border-color:rgba(98,208,255,.3)">
+          <h4 style="color:#bfe6ff">这一章的赌注</h4>
+          <p>我们要验证一件听起来不太可能的事：<strong>一个二次函数反复迭代，就足以产生混沌</strong>。不需要三个变量，不需要耗散，不需要奇怪的几何——只要「拉伸 + 折叠」。</p>
+        </div>
+        <div class="a card" style="border-color:rgba(232,176,75,.3)">
+          <h4 style="color:#f3d79a">还会多拿到一样东西</h4>
+          <p>一个<strong>普适常数</strong>：δ = 4.669…。它不依赖你选哪个函数——只要是「单峰、二次」的一族，倍周期级联的节奏就一样。这是非线性动力学里最出人意料的结论之一。</p>
+        </div>
+      </div>
+      <p class="a p" style="margin-top:18px;color:var(--mut);font-size:13.6px">记号统一：本章一律写 <em>x</em><sub>n+1</sub> = <em>r x</em><sub>n</sub>(1 − <em>x</em><sub>n</sub>)，参数用 <em>r</em>，区间 <em>x</em> ∈ [0, 1]、<em>r</em> ∈ [0, 4]（原书 §10.2 的取法）。</p>
+    </div>
+    <div class="pfoot">§10.0 引言</div>
+  </section>
+
+  <!-- ========== 03 不动点与蛛网 ========== -->
+  <section class="page" data-title="§10.1 · 不动点与稳定性判据">
+    <div class="page-inner">
+      <div class="split">
+        <div>
+          <div class="a kicker">§10.1 · 不动点与蛛网图</div>
+          <h2 class="a">判稳只要看一个数：<em>f</em>′(<em>x</em>*)</h2>
+          <p class="a p">不动点 <em>x</em>* 满足 <em>x</em>* = <em>f</em>(<em>x</em>*)。设 <em>x</em><sub>n</sub> = <em>x</em>* + η<sub>n</sub>，做一阶展开：</p>
+          <span class="formula">η<sub>n+1</sub> = f(x* + η<sub>n</sub>) − x* ≈ f′(x*) η<sub>n</sub></span>
+          <p class="a p">于是误差<strong>每步乘一个常数</strong>：η<sub>n</sub> ≈ [<em>f</em>′(<em>x</em>*)]<sup>n</sup> η₀。结论干净利落：</p>
+          <div class="a card" style="border-color:rgba(232,176,75,.36);margin:12px 0">
+            <p><strong>|<em>f</em>′(<em>x</em>*)| &lt; 1</strong> → 稳定（误差指数衰减）；<strong>|<em>f</em>′(<em>x</em>*)| &gt; 1</strong> → 不稳定；<strong>= 1</strong> → 线性化失效，要看高阶项。</p>
+          </div>
+          <p class="a p">注意这里的「指数衰减」是按<strong>步数</strong>算的，不是按时间。所以离散映射的稳定性判据里没有「实部为负」这种说法，只有一个绝对值。</p>
+        </div>
+        <div class="a fig">
+          <svg viewBox="0 0 480 320" role="img" aria-label="三幅蛛网图：不动点、周期 4 与混沌"><path d="M18.0 300.0 L19.1 296.8 L20.3 293.7 L21.4 290.6 L22.6 287.5 L23.8 284.6 L24.9 281.6 L26.1 278.8 L27.2 276.0 L28.4 273.2 L29.5 270.5 L30.6 267.8 L31.8 265.2 L33.0 262.7 L34.1 260.2 L35.2 257.7 L36.4 255.3 L37.5 253.0 L38.7 250.7 L39.8 248.5 L41.0 246.3 L42.1 244.2 L43.3 242.1 L44.5 240.1 L45.6 238.2 L46.8 236.3 L47.9 234.4 L49.0 232.6 L50.2 230.9 L51.4 229.2 L52.5 227.6 L53.7 226.0 L54.8 224.4 L56.0 223.0 L57.1 221.5 L58.2 220.2 L59.4 218.9 L60.6 217.6 L61.7 216.4 L62.9 215.2 L64.0 214.1 L65.2 213.1 L66.3 212.1 L67.5 211.2 L68.6 210.3 L69.8 209.4 L70.9 208.7 L72.0 207.9 L73.2 207.3 L74.3 206.6 L75.5 206.1 L76.7 205.6 L77.8 205.1 L78.9 204.7 L80.1 204.4 L81.2 204.1 L82.4 203.8 L83.5 203.6 L84.7 203.5 L85.8 203.4 L87.0 203.4 L88.1 203.4 L89.3 203.5 L90.5 203.6 L91.6 203.8 L92.8 204.1 L93.9 204.4 L95.0 204.7 L96.2 205.1 L97.3 205.6 L98.5 206.1 L99.7 206.6 L100.8 207.3 L101.9 207.9 L103.1 208.7 L104.2 209.4 L105.4 210.3 L106.6 211.2 L107.7 212.1 L108.8 213.1 L110.0 214.1 L111.2 215.2 L112.3 216.4 L113.5 217.6 L114.6 218.9 L115.8 220.2 L116.9 221.5 L118.0 223.0 L119.2 224.4 L120.4 226.0 L121.5 227.6 L122.6 229.2 L123.8 230.9 L125.0 232.6 L126.1 234.4 L127.2 236.3 L128.4 238.2 L129.6 240.1 L130.7 242.1 L131.8 244.2 L133.0 246.3 L134.2 248.5 L135.3 250.7 L136.4 253.0 L137.6 255.3 L138.8 257.7 L139.9 260.2 L141.1 262.7 L142.2 265.2 L143.3 267.8 L144.5 270.5 L145.7 273.2 L146.8 276.0 L147.9 278.8 L149.1 281.6 L150.2 284.6 L151.4 287.5 L152.5 290.6 L153.7 293.7 L154.8 296.8 L156.0 300.0" fill="none" stroke="#62d0ff" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M18.0 300.0 L156.0 162.0" fill="none" stroke="rgba(139,149,164,.6)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9" stroke-dasharray="4 3"/><path d="M18.0 300 L156.0 300" fill="none" stroke="rgba(255,255,255,.24)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><path d="M18.0 300 L18.0 162" fill="none" stroke="rgba(255,255,255,.24)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><path d="M34.6 283.4 L34.6 259.2 L58.8 259.2 L58.8 259.2 L58.8 219.5 L98.5 219.5 L98.5 219.5 L98.5 206.1 L111.9 206.1 L111.9 206.1 L111.9 216.0 L102.0 216.0 L102.0 216.0 L102.0 208.0 L110.0 208.0 L110.0 208.0 L110.0 214.2 L103.8 214.2 L103.8 214.2 L103.8 209.1 L108.9 209.1 L108.9 209.1 L108.9 213.1 L104.9 213.1 L104.9 213.1 L104.9 209.9 L108.1 209.9 L108.1 209.9 L108.1 212.4 L105.6 212.4 L105.6 212.4 L105.6 210.4 L107.6 210.4 L107.6 210.4 L107.6 212.0 L106.0 212.0 L106.0 212.0 L106.0 210.7 L107.3 210.7 L107.3 210.7 L107.3 211.7 L106.3 211.7 L106.3 211.7 L106.3 210.9 L107.1 210.9 L107.1 210.9 L107.1 211.6 L106.4 211.6 L106.4 211.6 L106.4 211.1 L106.9 211.1 L106.9 211.1 L106.9 211.5 L106.5 211.5 L106.5 211.5 L106.5 211.1 L106.9 211.1 L106.9 211.1 L106.9 211.4 L106.6 211.4 L106.6 211.4 L106.6 211.2 L106.8 211.2 L106.8 211.2 L106.8 211.4 L106.6 211.4 L106.6 211.4 L106.6 211.2 L106.8 211.2 L106.8 211.2 L106.8 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.2 L106.8 211.2 L106.8 211.2 L106.8 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3 L106.7 211.3" fill="none" stroke="#e8b04b" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><text x="87.0" y="316.0" fill="rgba(139,149,164,.95)" font-size="9.2" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">r = 2.8：收敛到不动点</text><text x="154.0" y="306.0" fill="#8b95a4" font-size="8.8" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="end">x_n</text><text x="26.0" y="156.0" fill="#8b95a4" font-size="8.8" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="start">x_n+1</text><path d="M172.0 300.0 L173.2 296.0 L174.3 292.1 L175.4 288.2 L176.6 284.4 L177.8 280.7 L178.9 277.1 L180.1 273.5 L181.2 269.9 L182.3 266.5 L183.5 263.1 L184.7 259.8 L185.8 256.5 L186.9 253.3 L188.1 250.2 L189.2 247.2 L190.4 244.2 L191.6 241.3 L192.7 238.4 L193.8 235.6 L195.0 232.9 L196.2 230.3 L197.3 227.7 L198.4 225.2 L199.6 222.7 L200.8 220.3 L201.9 218.0 L203.1 215.8 L204.2 213.6 L205.3 211.5 L206.5 209.4 L207.7 207.5 L208.8 205.5 L209.9 203.7 L211.1 201.9 L212.2 200.2 L213.4 198.6 L214.6 197.0 L215.7 195.5 L216.8 194.0 L218.0 192.7 L219.2 191.4 L220.3 190.1 L221.4 188.9 L222.6 187.8 L223.8 186.8 L224.9 185.8 L226.1 184.9 L227.2 184.1 L228.3 183.3 L229.5 182.6 L230.7 182.0 L231.8 181.4 L232.9 180.9 L234.1 180.5 L235.2 180.1 L236.4 179.8 L237.6 179.6 L238.7 179.4 L239.8 179.3 L241.0 179.2 L242.1 179.3 L243.3 179.4 L244.4 179.6 L245.6 179.8 L246.8 180.1 L247.9 180.5 L249.1 180.9 L250.2 181.4 L251.3 182.0 L252.5 182.6 L253.7 183.3 L254.8 184.1 L255.9 184.9 L257.1 185.8 L258.2 186.8 L259.4 187.8 L260.6 188.9 L261.7 190.1 L262.9 191.4 L264.0 192.7 L265.1 194.0 L266.3 195.5 L267.4 197.0 L268.6 198.6 L269.8 200.2 L270.9 201.9 L272.1 203.7 L273.2 205.5 L274.4 207.5 L275.5 209.4 L276.6 211.5 L277.8 213.6 L278.9 215.8 L280.1 218.0 L281.2 220.3 L282.4 222.7 L283.6 225.2 L284.7 227.7 L285.9 230.3 L287.0 232.9 L288.1 235.6 L289.3 238.4 L290.4 241.3 L291.6 244.2 L292.8 247.2 L293.9 250.2 L295.1 253.3 L296.2 256.5 L297.4 259.8 L298.5 263.1 L299.6 266.5 L300.8 269.9 L301.9 273.5 L303.1 277.1 L304.2 280.7 L305.4 284.4 L306.5 288.2 L307.7 292.1 L308.9 296.0 L310.0 300.0" fill="none" stroke="#62d0ff" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M172.0 300.0 L310.0 162.0" fill="none" stroke="rgba(139,149,164,.6)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9" stroke-dasharray="4 3"/><path d="M172.0 300 L310.0 300" fill="none" stroke="rgba(255,255,255,.24)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><path d="M172.0 300 L172.0 162" fill="none" stroke="rgba(255,255,255,.24)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><path d="M187.2 284.8 L187.2 252.7 L219.3 252.7 L219.3 252.7 L219.3 191.2 L280.8 191.2 L280.8 191.2 L280.8 219.4 L252.6 219.4 L252.6 219.4 L252.6 182.7 L289.3 182.7 L289.3 182.7 L289.3 238.5 L233.5 238.5 L233.5 238.5 L233.5 180.7 L291.3 180.7 L291.3 180.7 L291.3 243.5 L228.5 243.5 L228.5 243.5 L228.5 183.2 L288.8 183.2 L288.8 183.2 L288.8 237.2 L234.8 237.2 L234.8 237.2 L234.8 180.2 L291.8 180.2 L291.8 180.2 L291.8 244.6 L227.4 244.6 L227.4 244.6 L227.4 183.9 L288.1 183.9 L288.1 183.9 L288.1 235.4 L236.6 235.4 L236.6 235.4 L236.6 179.7 L292.3 179.7 L292.3 179.7 L292.3 245.9 L226.1 245.9 L226.1 245.9 L226.1 184.9 L287.1 184.9 L287.1 184.9 L287.1 233.2 L238.8 233.2 L238.8 233.2 L238.8 179.4 L292.6 179.4 L292.6 179.4 L292.6 246.8 L225.2 246.8 L225.2 246.8 L225.2 185.6 L286.4 185.6 L286.4 185.6 L286.4 231.5 L240.5 231.5 L240.5 231.5 L240.5 179.3 L292.7 179.3 L292.7 179.3 L292.7 247.2 L224.8 247.2 L224.8 247.2 L224.8 185.9 L286.1 185.9 L286.1 185.9 L286.1 230.9 L241.1 230.9 L241.1 230.9 L241.1 179.3 L292.7 179.3 L292.7 179.3 L292.7 247.2 L224.8 247.2 L224.8 247.2 L224.8 185.9 L286.1 185.9 L286.1 185.9 L286.1 230.9 L241.1 230.9 L241.1 230.9 L241.1 179.3 L292.7 179.3 L292.7 179.3 L292.7 247.2 L224.8 247.2 L224.8 247.2 L224.8 185.9 L286.1 185.9 L286.1 185.9 L286.1 230.9 L241.1 230.9 L241.1 230.9 L241.1 179.3 L292.7 179.3 L292.7 179.3 L292.7 247.2 L224.8 247.2 L224.8 247.2 L224.8 185.9 L286.1 185.9 L286.1 185.9 L286.1 230.9 L241.1 230.9 L241.1 230.9 L241.1 179.3 L292.7 179.3 L292.7 179.3 L292.7 247.2 L224.8 247.2 L224.8 247.2 L224.8 185.9 L286.1 185.9 L286.1 185.9 L286.1 230.9 L241.1 230.9 L241.1 230.9 L241.1 179.3 L292.7 179.3 L292.7 179.3 L292.7 247.2 L224.8 247.2 L224.8 247.2 L224.8 185.9 L286.1 185.9 L286.1 185.9 L286.1 230.9 L241.1 230.9 L241.1 230.9 L241.1 179.3 L292.7 179.3" fill="none" stroke="#e8b04b" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><text x="241.0" y="316.0" fill="rgba(139,149,164,.95)" font-size="9.2" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">r = 3.5：周期 4</text><text x="308.0" y="306.0" fill="#8b95a4" font-size="8.8" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="end">x_n</text><text x="180.0" y="156.0" fill="#8b95a4" font-size="8.8" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="start">x_n+1</text><path d="M326.0 300.0 L327.1 295.5 L328.3 291.1 L329.4 286.7 L330.6 282.4 L331.8 278.2 L332.9 274.1 L334.1 270.1 L335.2 266.1 L336.4 262.2 L337.5 258.4 L338.6 254.6 L339.8 250.9 L340.9 247.3 L342.1 243.8 L343.2 240.4 L344.4 237.0 L345.6 233.7 L346.7 230.5 L347.9 227.4 L349.0 224.3 L350.1 221.3 L351.3 218.4 L352.4 215.5 L353.6 212.8 L354.8 210.1 L355.9 207.5 L357.1 204.9 L358.2 202.5 L359.4 200.1 L360.5 197.8 L361.6 195.6 L362.8 193.4 L363.9 191.3 L365.1 189.3 L366.2 187.4 L367.4 185.5 L368.6 183.7 L369.7 182.0 L370.9 180.4 L372.0 178.9 L373.1 177.4 L374.3 176.0 L375.4 174.7 L376.6 173.4 L377.8 172.2 L378.9 171.1 L380.1 170.1 L381.2 169.2 L382.4 168.3 L383.5 167.5 L384.6 166.8 L385.8 166.1 L386.9 165.6 L388.1 165.1 L389.2 164.7 L390.4 164.3 L391.6 164.1 L392.7 163.9 L393.9 163.8 L395.0 163.7 L396.1 163.8 L397.3 163.9 L398.4 164.1 L399.6 164.3 L400.8 164.7 L401.9 165.1 L403.1 165.6 L404.2 166.1 L405.4 166.8 L406.5 167.5 L407.6 168.3 L408.8 169.2 L409.9 170.1 L411.1 171.1 L412.2 172.2 L413.4 173.4 L414.6 174.7 L415.7 176.0 L416.9 177.4 L418.0 178.9 L419.1 180.4 L420.3 182.0 L421.4 183.7 L422.6 185.5 L423.8 187.4 L424.9 189.3 L426.1 191.3 L427.2 193.4 L428.4 195.6 L429.5 197.8 L430.6 200.1 L431.8 202.5 L432.9 204.9 L434.1 207.5 L435.2 210.1 L436.4 212.8 L437.6 215.5 L438.7 218.4 L439.9 221.3 L441.0 224.3 L442.1 227.4 L443.3 230.5 L444.4 233.7 L445.6 237.0 L446.8 240.4 L447.9 243.8 L449.1 247.3 L450.2 250.9 L451.4 254.6 L452.5 258.4 L453.6 262.2 L454.8 266.1 L455.9 270.1 L457.1 274.1 L458.2 278.2 L459.4 282.4 L460.5 286.7 L461.7 291.1 L462.9 295.5 L464.0 300.0" fill="none" stroke="#62d0ff" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M326.0 300.0 L464.0 162.0" fill="none" stroke="rgba(139,149,164,.6)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9" stroke-dasharray="4 3"/><path d="M326.0 300 L464.0 300" fill="none" stroke="rgba(255,255,255,.24)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><path d="M326.0 300 L326.0 162" fill="none" stroke="rgba(255,255,255,.24)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><path d="M343.9 282.1 L343.9 238.3 L387.7 238.3 L387.7 238.3 L387.7 165.3 L460.7 165.3 L460.7 165.3 L460.7 287.4 L338.6 287.4 L338.6 287.4 L338.6 254.7 L371.3 254.7 L371.3 254.7 L371.3 179.8 L446.2 179.8 L446.2 179.8 L446.2 238.6 L387.4 238.6 L387.4 238.6 L387.4 165.4 L460.6 165.4 L460.6 165.4 L460.6 286.9 L339.1 286.9 L339.1 286.9 L339.1 253.2 L372.8 253.2 L372.8 253.2 L372.8 177.9 L448.1 177.9 L448.1 177.9 L448.1 244.5 L381.5 244.5 L381.5 244.5 L381.5 168.9 L457.1 168.9 L457.1 168.9 L457.1 274.0 L352.0 274.0 L352.0 274.0 L352.0 216.6 L409.4 216.6 L409.4 216.6 L409.4 169.7 L456.3 169.7 L456.3 169.7 L456.3 271.4 L354.6 271.4 L354.6 271.4 L354.6 210.3 L415.7 210.3 L415.7 210.3 L415.7 175.9 L450.1 175.9 L450.1 175.9 L450.1 250.5 L375.5 250.5 L375.5 250.5 L375.5 174.6 L451.4 174.6 L451.4 174.6 L451.4 254.8 L371.2 254.8 L371.2 254.8 L371.2 180.0 L446.0 180.0 L446.0 180.0 L446.0 238.2 L387.8 238.2 L387.8 238.2 L387.8 165.2 L460.8 165.2 L460.8 165.2 L460.8 287.6 L338.4 287.6 L338.4 287.6 L338.4 255.6 L370.4 255.6 L370.4 255.6 L370.4 181.0 L445.0 181.0 L445.0 181.0 L445.0 235.3 L390.7 235.3 L390.7 235.3 L390.7 164.3 L461.7 164.3 L461.7 164.3 L461.7 291.2 L334.8 291.2 L334.8 291.2 L334.8 267.5 L358.5 267.5 L358.5 267.5 L358.5 201.8 L424.2 201.8 L424.2 201.8 L424.2 188.1 L437.9 188.1 L437.9 188.1 L437.9 216.4 L409.6 216.4 L409.6 216.4 L409.6 169.8 L456.2 169.8 L456.2 169.8 L456.2 271.0 L355.0 271.0 L355.0 271.0 L355.0 209.5 L416.5 209.5 L416.5 209.5 L416.5 177.0 L449.0 177.0 L449.0 177.0 L449.0 247.2 L378.8 247.2 L378.8 247.2 L378.8 171.3 L454.7 171.3 L454.7 171.3 L454.7 265.8 L360.2 265.8 L360.2 265.8 L360.2 198.4 L427.6 198.4 L427.6 198.4 L427.6 194.1 L431.9 194.1 L431.9 194.1 L431.9 202.6 L423.4 202.6 L423.4 202.6 L423.4 186.8 L439.2 186.8 L439.2 186.8 L439.2 219.7 L406.3 219.7 L406.3 219.7 L406.3 167.4 L458.6 167.4 L458.6 167.4 L458.6 279.6 L346.4 279.6 L346.4 279.6 L346.4 231.4 L394.6 231.4 L394.6 231.4 L394.6 163.7 L462.3 163.7 L462.3 163.7 L462.3 293.3 L332.7 293.3 L332.7 293.3 L332.7 274.6 L351.4 274.6 L351.4 274.6 L351.4 218.3 L407.7 218.3 L407.7 218.3 L407.7 168.4 L457.6 168.4 L457.6 168.4 L457.6 276.0 L350.0 276.0 L350.0 276.0 L350.0 221.7 L404.3 221.7 L404.3 221.7 L404.3 166.2 L459.8 166.2 L459.8 166.2 L459.8 283.9 L342.1 283.9 L342.1 283.9 L342.1 243.7 L382.3 243.7 L382.3 243.7 L382.3 168.3 L457.7 168.3" fill="none" stroke="#e8b04b" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><text x="395.0" y="316.0" fill="rgba(139,149,164,.95)" font-size="9.2" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">r = 3.95：混沌</text><text x="462.0" y="306.0" fill="#8b95a4" font-size="8.8" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="end">x_n</text><text x="334.0" y="156.0" fill="#8b95a4" font-size="8.8" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="start">x_n+1</text><text x="240.0" y="16.0" fill="#8b95a4" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">抛物线 + 对角线 + 阶梯：蛛网图（数值迭代）</text></svg>
+          <div class="figcap">三幅数值蛛网图。青线＝抛物线 <em>f</em>，灰虚线＝对角线 <em>x</em><sub>n+1</sub> = <em>x</em><sub>n</sub>，金线＝轨道（竖着走到抛物线上，再横着走回对角线）。左：收敛到不动点；中：绕成周期 4；右：在整段上来回乱跑。</div>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§10.1 不动点与蛛网图</div>
+  </section>
+
+  <!-- ========== 04 蛛网怎么读 ========== -->
+  <section class="page" data-title="§10.1 · 蛛网图怎么读">
+    <div class="page-inner">
+      <div class="a kicker">§10.1 · 读图</div>
+      <h2 class="a">三步一个循环，图就是算盘</h2>
+      <p class="a p">蛛网图（cobweb）的规则只有三步，每次迭代一遍：</p>
+      <p class="a p" style="line-height:2">① 从对角线上的 (<em>x</em><sub>n</sub>, <em>x</em><sub>n</sub>) <strong>竖着</strong>走到抛物线，高度是 <em>f</em>(<em>x</em><sub>n</sub>) = <em>x</em><sub>n+1</sub>；<br>
+         ② <strong>横着</strong>走回对角线，把高度换成新的横坐标；<br>
+         ③ 重复。</p>
+      <p class="a p">于是：<strong>不动点</strong>是抛物线与对角线的交点；<strong>轨迹收敛</strong>表现为阶梯越缩越小、盘成一个「蛛网」；<strong>周期轨道</strong>表现为一个闭合的多边形，绕一圈回到原点；<strong>混沌</strong>表现为阶梯把整段填满、不闭合。</p>
+      <div class="split" style="margin-top:14px;gap:14px">
+        <div class="a card">
+          <h4>为什么这个判据这么几何</h4>
+          <p>在不动点附近，抛物线相对对角线的「陡度」就是 <em>f</em>′(<em>x</em>*)。陡度小于 1（更平）→ 每走一步都更靠近交点 → 稳定；陡度大于 1 → 每走一步更远 → 不稳定。<strong>绝对值 = 陡度的方向不重要</strong>，正负只决定是「直接逼近」还是「左右横跳着逼近」。</p>
+        </div>
+        <div class="a card" style="border-color:rgba(255,151,112,.34)">
+          <h4 style="color:#ffc3ad">边界提醒</h4>
+          <p>蛛网图只是<strong>一维</strong>的专利。二维以上没有「一条曲线 + 一条对角线」可画，只能退回相图。所以第 9 章才费那么大劲把洛伦兹压成洛伦兹映射——换来画蛛网图的资格。</p>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§10.1 不动点与蛛网图</div>
+  </section>
+
+  <!-- ========== 05 逻辑斯谛映射 ========== -->
+  <section class="page" data-title="§10.2 · 逻辑斯谛映射：一条抛物线">
+    <div class="page-inner">
+      <div class="a kicker">§10.2 · 逻辑斯谛映射：数值方法</div>
+      <h2 class="a">从虫子到抛物线</h2>
+      <p class="a p">第 2 章的逻辑斯谛方程 <em>Ṅ</em> = <em>rN</em>(1 − <em>N</em>/<em>K</em>) 描述连续繁殖。若把繁殖看成「一年一代」、下一代只由这一代决定，就得到它的离散版本：</p>
+      <span class="formula">x<sub>n+1</sub> = r x<sub>n</sub> (1 − x<sub>n</sub>)，　0 ≤ r ≤ 4，　x ∈ [0, 1]</span>
+      <p class="a p">这里 <em>x</em><sub>n</sub> 是第 <em>n</em> 代的无量纲虫口，<em>r</em> 是固有增长率。图像是一条抛物线：在 <em>x</em> = 1/2 处取最大值 <em>r</em>/4。</p>
+      <p class="a p">把 <em>r</em> 限制在 [0, 4]，这条抛物线就把 [0, 1] 映到它自己：<strong>x 永远不会跑出去</strong>。这一点很关键——系统被关在一个盒子里，所有复杂性都只能在盒子里发生。</p>
+      <p class="a p">原书 §10.2 开头提到 Robert May 1976 年那篇综述（同一篇文章的中文页脚上写着「把这类差分方程引入基础数学课程，对学生是一种福音」）：<strong>一个中学生能算的递推式，居然能演出混沌</strong>。这就是它成为全章主角的原因。</p>
+      <p class="a p" style="color:var(--mut);font-size:13.6px">为什么不用别的函数：因为抛物线最简单、又能代表一大类「单峰」形状——而本章最惊人的结论（普适性）恰恰说明：<strong>具体形状不重要</strong>，只要它是单峰、二次。</p>
+    </div>
+    <div class="pfoot">§10.2 逻辑斯谛映射：数值方法</div>
+  </section>
+
+  <!-- ========== 06 三个区间 ========== -->
+  <section class="page" data-title="§10.2 · 数值：r 从小到大">
+    <div class="page-inner">
+      <div class="a kicker">§10.2 · 数值：先看三个区间</div>
+      <h2 class="a">r 从小到大，先是死活，再是定数</h2>
+      <div class="split" style="margin-top:12px;gap:14px">
+        <div>
+          <div class="a card" style="margin-bottom:10px;border-color:rgba(217,83,74,.34)">
+            <h4 style="color:#ffb4a6">0 &lt; r &lt; 1：灭绝</h4>
+            <p>不管初始虫口多大，最终 <em>x</em><sub>n</sub> → 0。算法是「每代减少到原来的 r 倍以下」，撑不住。</p>
+          </div>
+          <div class="a card" style="margin-bottom:10px;border-color:rgba(79,191,168,.4)">
+            <h4 style="color:#a8e3d6">1 &lt; r &lt; 3：稳到一个数</h4>
+            <p>收敛到非零不动点 <em>x</em>* = 1 − 1/<em>r</em>。r = 2 时每步直接跳到 <em>x</em>*，r 接近 3 时左右横跳着靠近（阻尼振荡）。</p>
+          </div>
+          <div class="a card">
+            <h4>3 &lt; r &lt; 1+√6 ≈ 3.449：周期 2</h4>
+            <p>不动点失稳，轨道改在两个值之间来回。<strong>这是倍周期的第一级台阶。</strong></p>
+          </div>
+        </div>
+        <div>
+          <div class="a fig">
+            <svg viewBox="0 0 480 320" role="img" aria-label="三条轨道的时间序列"><path d="M16.0 240 L166.0 240" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><path d="M16.0 240 L16.0 62" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><path d="M16.0 174.2 L19.8 97.8 L23.7 153.8 L27.5 89.5 L31.4 174.2 L35.2 97.8 L39.1 153.8 L42.9 89.5 L46.8 174.2 L50.6 97.8 L54.5 153.8 L58.3 89.5 L62.2 174.2 L66.0 97.8 L69.8 153.8 L73.7 89.5 L77.5 174.2 L81.4 97.8 L85.2 153.8 L89.1 89.5 L92.9 174.2 L96.8 97.8 L100.6 153.8 L104.5 89.5 L108.3 174.2 L112.2 97.8 L116.0 153.8 L119.8 89.5 L123.7 174.2 L127.5 97.8 L131.4 153.8 L135.2 89.5 L139.1 174.2 L142.9 97.8 L146.8 153.8 L150.6 89.5 L154.5 174.2 L158.3 97.8 L162.2 153.8 L166.0 89.5" fill="none" stroke="#e8b04b" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><circle cx="16.0" cy="174.2" r="1.6" fill="#e8b04b"/><circle cx="19.8" cy="97.8" r="1.6" fill="#e8b04b"/><circle cx="23.7" cy="153.8" r="1.6" fill="#e8b04b"/><circle cx="27.5" cy="89.5" r="1.6" fill="#e8b04b"/><circle cx="31.4" cy="174.2" r="1.6" fill="#e8b04b"/><circle cx="35.2" cy="97.8" r="1.6" fill="#e8b04b"/><circle cx="39.1" cy="153.8" r="1.6" fill="#e8b04b"/><circle cx="42.9" cy="89.5" r="1.6" fill="#e8b04b"/><circle cx="46.8" cy="174.2" r="1.6" fill="#e8b04b"/><circle cx="50.6" cy="97.8" r="1.6" fill="#e8b04b"/><circle cx="54.5" cy="153.8" r="1.6" fill="#e8b04b"/><circle cx="58.3" cy="89.5" r="1.6" fill="#e8b04b"/><circle cx="62.2" cy="174.2" r="1.6" fill="#e8b04b"/><circle cx="66.0" cy="97.8" r="1.6" fill="#e8b04b"/><circle cx="69.8" cy="153.8" r="1.6" fill="#e8b04b"/><circle cx="73.7" cy="89.5" r="1.6" fill="#e8b04b"/><circle cx="77.5" cy="174.2" r="1.6" fill="#e8b04b"/><circle cx="81.4" cy="97.8" r="1.6" fill="#e8b04b"/><circle cx="85.2" cy="153.8" r="1.6" fill="#e8b04b"/><circle cx="89.1" cy="89.5" r="1.6" fill="#e8b04b"/><circle cx="92.9" cy="174.2" r="1.6" fill="#e8b04b"/><circle cx="96.8" cy="97.8" r="1.6" fill="#e8b04b"/><circle cx="100.6" cy="153.8" r="1.6" fill="#e8b04b"/><circle cx="104.5" cy="89.5" r="1.6" fill="#e8b04b"/><circle cx="108.3" cy="174.2" r="1.6" fill="#e8b04b"/><circle cx="112.2" cy="97.8" r="1.6" fill="#e8b04b"/><circle cx="116.0" cy="153.8" r="1.6" fill="#e8b04b"/><circle cx="119.8" cy="89.5" r="1.6" fill="#e8b04b"/><circle cx="123.7" cy="174.2" r="1.6" fill="#e8b04b"/><circle cx="127.5" cy="97.8" r="1.6" fill="#e8b04b"/><circle cx="131.4" cy="153.8" r="1.6" fill="#e8b04b"/><circle cx="135.2" cy="89.5" r="1.6" fill="#e8b04b"/><circle cx="139.1" cy="174.2" r="1.6" fill="#e8b04b"/><circle cx="142.9" cy="97.8" r="1.6" fill="#e8b04b"/><circle cx="146.8" cy="153.8" r="1.6" fill="#e8b04b"/><circle cx="150.6" cy="89.5" r="1.6" fill="#e8b04b"/><circle cx="154.5" cy="174.2" r="1.6" fill="#e8b04b"/><circle cx="158.3" cy="97.8" r="1.6" fill="#e8b04b"/><circle cx="162.2" cy="153.8" r="1.6" fill="#e8b04b"/><circle cx="166.0" cy="89.5" r="1.6" fill="#e8b04b"/><text x="91.0" y="258.0" fill="rgba(139,149,164,.95)" font-size="9.4" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">r = 3.5：周期 4</text><path d="M166.0 240 L316.0 240" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><path d="M166.0 240 L166.0 62" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><path d="M166.0 153.2 L169.8 75.3 L173.7 213.1 L177.5 153.2 L181.4 75.3 L185.2 213.1 L189.1 153.2 L192.9 75.3 L196.8 213.1 L200.6 153.2 L204.5 75.3 L208.3 213.1 L212.2 153.2 L216.0 75.3 L219.8 213.1 L223.7 153.2 L227.5 75.3 L231.4 213.1 L235.2 153.2 L239.1 75.3 L242.9 213.1 L246.8 153.2 L250.6 75.3 L254.5 213.1 L258.3 153.2 L262.2 75.3 L266.0 213.1 L269.8 153.2 L273.7 75.3 L277.5 213.1 L281.4 153.2 L285.2 75.3 L289.1 213.1 L292.9 153.2 L296.8 75.3 L300.6 213.1 L304.5 153.2 L308.3 75.3 L312.2 213.1 L316.0 153.2" fill="none" stroke="#e8b04b" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><circle cx="166.0" cy="153.2" r="1.6" fill="#e8b04b"/><circle cx="169.8" cy="75.3" r="1.6" fill="#e8b04b"/><circle cx="173.7" cy="213.1" r="1.6" fill="#e8b04b"/><circle cx="177.5" cy="153.2" r="1.6" fill="#e8b04b"/><circle cx="181.4" cy="75.3" r="1.6" fill="#e8b04b"/><circle cx="185.2" cy="213.1" r="1.6" fill="#e8b04b"/><circle cx="189.1" cy="153.2" r="1.6" fill="#e8b04b"/><circle cx="192.9" cy="75.3" r="1.6" fill="#e8b04b"/><circle cx="196.8" cy="213.1" r="1.6" fill="#e8b04b"/><circle cx="200.6" cy="153.2" r="1.6" fill="#e8b04b"/><circle cx="204.5" cy="75.3" r="1.6" fill="#e8b04b"/><circle cx="208.3" cy="213.1" r="1.6" fill="#e8b04b"/><circle cx="212.2" cy="153.2" r="1.6" fill="#e8b04b"/><circle cx="216.0" cy="75.3" r="1.6" fill="#e8b04b"/><circle cx="219.8" cy="213.1" r="1.6" fill="#e8b04b"/><circle cx="223.7" cy="153.2" r="1.6" fill="#e8b04b"/><circle cx="227.5" cy="75.3" r="1.6" fill="#e8b04b"/><circle cx="231.4" cy="213.1" r="1.6" fill="#e8b04b"/><circle cx="235.2" cy="153.2" r="1.6" fill="#e8b04b"/><circle cx="239.1" cy="75.3" r="1.6" fill="#e8b04b"/><circle cx="242.9" cy="213.1" r="1.6" fill="#e8b04b"/><circle cx="246.8" cy="153.2" r="1.6" fill="#e8b04b"/><circle cx="250.6" cy="75.3" r="1.6" fill="#e8b04b"/><circle cx="254.5" cy="213.1" r="1.6" fill="#e8b04b"/><circle cx="258.3" cy="153.2" r="1.6" fill="#e8b04b"/><circle cx="262.2" cy="75.3" r="1.6" fill="#e8b04b"/><circle cx="266.0" cy="213.1" r="1.6" fill="#e8b04b"/><circle cx="269.8" cy="153.2" r="1.6" fill="#e8b04b"/><circle cx="273.7" cy="75.3" r="1.6" fill="#e8b04b"/><circle cx="277.5" cy="213.1" r="1.6" fill="#e8b04b"/><circle cx="281.4" cy="153.2" r="1.6" fill="#e8b04b"/><circle cx="285.2" cy="75.3" r="1.6" fill="#e8b04b"/><circle cx="289.1" cy="213.1" r="1.6" fill="#e8b04b"/><circle cx="292.9" cy="153.2" r="1.6" fill="#e8b04b"/><circle cx="296.8" cy="75.3" r="1.6" fill="#e8b04b"/><circle cx="300.6" cy="213.1" r="1.6" fill="#e8b04b"/><circle cx="304.5" cy="153.2" r="1.6" fill="#e8b04b"/><circle cx="308.3" cy="75.3" r="1.6" fill="#e8b04b"/><circle cx="312.2" cy="213.1" r="1.6" fill="#e8b04b"/><circle cx="316.0" cy="153.2" r="1.6" fill="#e8b04b"/><text x="241.0" y="258.0" fill="rgba(139,149,164,.95)" font-size="9.4" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">r = 3.83：周期 3</text><path d="M316.0 240 L466.0 240" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><path d="M316.0 240 L316.0 62" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><path d="M316.0 72.3 L319.8 223.6 L323.7 182.2 L327.5 90.4 L331.4 164.0 L335.2 74.6 L339.1 215.3 L342.9 157.5 L346.8 72.6 L350.6 222.6 L354.5 179.1 L358.3 86.6 L362.2 175.3 L366.0 82.6 L369.8 187.8 L373.7 98.2 L377.5 142.9 L381.4 75.1 L385.2 213.5 L389.1 152.5 L392.9 72.4 L396.8 223.5 L400.6 181.7 L404.5 89.7 L408.3 166.1 L412.2 75.6 L416.0 211.5 L419.8 147.3 L423.7 73.3 L427.5 219.9 L431.4 170.9 L435.2 78.7 L439.1 200.7 L442.9 121.8 L446.8 95.8 L450.6 149.0 L454.5 72.9 L458.3 221.5 L462.2 175.8 L466.0 83.0" fill="none" stroke="#62d0ff" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><circle cx="316.0" cy="72.3" r="1.6" fill="#62d0ff"/><circle cx="319.8" cy="223.6" r="1.6" fill="#62d0ff"/><circle cx="323.7" cy="182.2" r="1.6" fill="#62d0ff"/><circle cx="327.5" cy="90.4" r="1.6" fill="#62d0ff"/><circle cx="331.4" cy="164.0" r="1.6" fill="#62d0ff"/><circle cx="335.2" cy="74.6" r="1.6" fill="#62d0ff"/><circle cx="339.1" cy="215.3" r="1.6" fill="#62d0ff"/><circle cx="342.9" cy="157.5" r="1.6" fill="#62d0ff"/><circle cx="346.8" cy="72.6" r="1.6" fill="#62d0ff"/><circle cx="350.6" cy="222.6" r="1.6" fill="#62d0ff"/><circle cx="354.5" cy="179.1" r="1.6" fill="#62d0ff"/><circle cx="358.3" cy="86.6" r="1.6" fill="#62d0ff"/><circle cx="362.2" cy="175.3" r="1.6" fill="#62d0ff"/><circle cx="366.0" cy="82.6" r="1.6" fill="#62d0ff"/><circle cx="369.8" cy="187.8" r="1.6" fill="#62d0ff"/><circle cx="373.7" cy="98.2" r="1.6" fill="#62d0ff"/><circle cx="377.5" cy="142.9" r="1.6" fill="#62d0ff"/><circle cx="381.4" cy="75.1" r="1.6" fill="#62d0ff"/><circle cx="385.2" cy="213.5" r="1.6" fill="#62d0ff"/><circle cx="389.1" cy="152.5" r="1.6" fill="#62d0ff"/><circle cx="392.9" cy="72.4" r="1.6" fill="#62d0ff"/><circle cx="396.8" cy="223.5" r="1.6" fill="#62d0ff"/><circle cx="400.6" cy="181.7" r="1.6" fill="#62d0ff"/><circle cx="404.5" cy="89.7" r="1.6" fill="#62d0ff"/><circle cx="408.3" cy="166.1" r="1.6" fill="#62d0ff"/><circle cx="412.2" cy="75.6" r="1.6" fill="#62d0ff"/><circle cx="416.0" cy="211.5" r="1.6" fill="#62d0ff"/><circle cx="419.8" cy="147.3" r="1.6" fill="#62d0ff"/><circle cx="423.7" cy="73.3" r="1.6" fill="#62d0ff"/><circle cx="427.5" cy="219.9" r="1.6" fill="#62d0ff"/><circle cx="431.4" cy="170.9" r="1.6" fill="#62d0ff"/><circle cx="435.2" cy="78.7" r="1.6" fill="#62d0ff"/><circle cx="439.1" cy="200.7" r="1.6" fill="#62d0ff"/><circle cx="442.9" cy="121.8" r="1.6" fill="#62d0ff"/><circle cx="446.8" cy="95.8" r="1.6" fill="#62d0ff"/><circle cx="450.6" cy="149.0" r="1.6" fill="#62d0ff"/><circle cx="454.5" cy="72.9" r="1.6" fill="#62d0ff"/><circle cx="458.3" cy="221.5" r="1.6" fill="#62d0ff"/><circle cx="462.2" cy="175.8" r="1.6" fill="#62d0ff"/><circle cx="466.0" cy="83.0" r="1.6" fill="#62d0ff"/><text x="391.0" y="258.0" fill="rgba(139,149,164,.95)" font-size="9.4" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">r = 3.9：混沌</text><text x="240.0" y="16.0" fill="#8b95a4" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">x_n 随 n 的序列（前 40 步，已走过 900 步暂态）</text><text x="240.0" y="300.0" fill="rgba(139,149,164,.95)" font-size="9.2" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">周期 4 与周期 3 是能数出来的；r = 3.9 那条数不出来</text></svg>
+            <div class="figcap">三条数值轨道（已走过 900 步暂态，每幅画 40 步）。左：周期 4（r = 3.5）；中：周期 3（r = 3.83，落在周期窗口里）；右：r = 3.9，数不出周期。</div>
+          </div>
+          <p class="a p" style="margin-top:10px;font-size:13.4px;color:var(--mut)">注意中图是<strong>周期 3</strong>而不是周期 6 或别的：同一个 <em>r</em> 附近，窗口里的周期是「奇数倍」结构的产物（§10.4）。</p>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§10.2 逻辑斯谛映射：数值方法</div>
+  </section>
+
+  <!-- ========== 07 倍周期级联 ========== -->
+  <section class="page" data-title="§10.2 · 倍周期级联">
+    <div class="page-inner">
+      <div class="a kicker">§10.2 · 数值：级联</div>
+      <h2 class="a">2 → 4 → 8 → 16 → … → 混沌</h2>
+      <p class="a p">继续加 <em>r</em>：周期 2 在 <em>r</em> = 1+√6 ≈ 3.4495 处失稳，变成周期 4；再往上变 8、16、32……每一次翻倍所需的参数增量越来越小，最后在一串<strong>收敛</strong>的参数值处堆积到无穷：</p>
+      <span class="formula">r∞ = 3.5699456…</span>
+      <p class="a p">越过 <em>r</em>∞ 之后，周期变成无穷大（永不重复），同时轨道被限制在有限区间里——这就是混沌。再往上，混沌区里还嵌着一条条「周期窗口」（§10.4）。</p>
+      <div class="a card" style="border-color:rgba(98,208,255,.3);margin-top:14px">
+        <h4 style="color:#bfe6ff">把「倍周期」想成一次挤压</h4>
+        <p><em>r</em> 越大，抛物线的峰越高，越容易把相邻的两个值「折」到一起。折一次，周期翻倍；折得越来越频繁，翻倍就越来越密。<strong>「拉伸 + 折叠」就是混沌的发动机</strong>，这条主线从第 9 章一路贯到第 12 章。</p>
+      </div>
+      <p class="a p" style="margin-top:14px;color:var(--mut);font-size:13.6px">为什么这个级联值得单独讲一节：因为它的<strong>节奏</strong>（相邻两级参数间距的比值）是一个与具体函数无关的常数。那就是下一节之后要讲的 δ。</p>
+    </div>
+    <div class="pfoot">§10.2 逻辑斯谛映射：数值方法</div>
+  </section>
+
+  <!-- ========== 08 演示 01 ========== -->
+  <section class="page" data-title="演示 01 · 分岔图：把级联看成一棵树" data-steps="3" data-hook="bifur">
+    <div class="page-inner">
+      <div class="split" style="grid-template-columns:1.1fr .9fr">
+        <div class="a demo">
+          <canvas id="cv1" height="380"></canvas>
+          <div class="ctrls">
+            <div class="slider"><span>中心 r</span>
+              <input type="range" id="p1" min="2.6" max="3.95" step="0.005" value="3.25"><b id="p1v">3.250</b></div>
+            <button class="btn" id="reset1">重置</button>
+          </div>
+          <div class="readout" id="ro1"></div>
+        </div>
+        <div class="a">
+          <div class="steps" id="st1">
+            <div class="step on">
+              <div class="snum">01 / 03 · 全貌</div>
+              <h3>正中间那一次分裂，就是级联</h3>
+              <p>横轴 <em>r</em>、纵轴长期落点。左边一条线（不动点），到 <em>r</em> = 3 分成两条，到 3.449 分成四条……<strong>分叉越来越密</strong>，最后糊成一片。</p>
+            </div>
+            <div class="step">
+              <div class="snum">02 / 03 · 放大级联</div>
+              <h3>同一种分叉，反复复制</h3>
+              <p>把 3.4–3.6 放大：你看到的是<strong>和上一拍同样的形状</strong>，只是横向压得更扁。这就是自相似——§10.7 的重整化正是从这里出发。</p>
+            </div>
+            <div class="step">
+              <div class="snum">03 / 03 · 放大周期窗口</div>
+              <h3>混沌里面还有秩序</h3>
+              <p>放大到 3.82–3.86：混沌带里突然出现一条<strong>又细又白</strong>的空档——那是周期 3 的窗口，里面还套着自己的倍周期级联。窗口不是例外，是规律。</p>
+            </div>
+          </div>
+          <div class="sdots" id="sd1"><i class="on"></i><i></i><i></i></div>
+          <div class="readout" style="margin-top:12px">滑块改放大中心，三拍改放大倍率</div>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§10.2 逻辑斯谛映射：数值方法</div>
+  </section>
+
+  <!-- ========== 09 解析：不动点 ========== -->
+  <section class="page" data-title="§10.3 · 解析：不动点与第一个稳定区">
+    <div class="page-inner">
+      <div class="a kicker">§10.3 · 逻辑斯谛映射：解析方法</div>
+      <h2 class="a">不动点能解出来，稳定区也能</h2>
+      <p class="a p">解 <em>x</em> = <em>rx</em>(1 − <em>x</em>)：</p>
+      <span class="formula">x [r(1−x) − 1] = 0　⇒　x* = 0　或　x* = 1 − 1/r</span>
+      <p class="a p">第一个不动点永远存在；第二个只在 <em>r</em> &gt; 1 时有物理意义（在 [0,1] 内）。稳定性用 §10.1 的判据：</p>
+      <span class="formula">f′(x) = r(1 − 2x)　⇒　f′(0) = r，　f′(1 − 1/r) = 2 − r</span>
+      <p class="a p">于是：<strong>0 &lt; r &lt; 1</strong> 时原点稳定（虫口灭绝）；<strong>1 &lt; r &lt; 3</strong> 时原点不稳、非零不动点稳定（|2 − r| &lt; 1）。在 <em>r</em> = 1 处两者交换稳定性——跨临界分岔（§8.1）；在 <em>r</em> = 3 处非零不动点失稳——<strong>倍周期分岔</strong>。</p>
+      <div class="a card" style="margin-top:14px">
+        <h4>为什么 r = 3 是倍周期而不是别的</h4>
+        <p>因为 <em>f</em>′(1−1/<em>r</em>) = 2 − <em>r</em> 在 <em>r</em> = 3 时等于 <strong>−1</strong>。乘子等于 −1 意味着：误差每步<strong>大小不变、符号翻转</strong>。轨道不再收敛到一点，而是被「翻」到点的另一侧——这正是产生 2 周期的机制。</p>
+      </div>
+      <p class="a p" style="margin-top:12px;color:var(--mut);font-size:13.6px">对比连续系统：第 8 章的霍普夫是复特征值穿虚轴（λ = ±iω），这里是一维的乘子穿 −1。都是「越过分界」，但一维没有旋转可言，只能左右翻。</p>
+    </div>
+    <div class="pfoot">§10.3 逻辑斯谛映射：解析方法</div>
+  </section>
+
+  <!-- ========== 10 解析：周期 2 ========== -->
+  <section class="page" data-title="§10.3 · 解析：2 周期与它的稳定区">
+    <div class="page-inner">
+      <div class="a kicker">§10.3 · 解析：周期 2</div>
+      <h2 class="a">解 <em>f</em>²(<em>x</em>) = <em>x</em>，拿到 2 周期</h2>
+      <p class="a p">2 周期点满足 <em>f</em>(<em>f</em>(<em>x</em>)) = <em>x</em>。这是四次方程，但其中两个根就是已经知道的不动点；除掉它们，剩下的二次式给出：</p>
+      <span class="formula">x<sub>±</sub> = [(r+1) ± √((r−3)(r+1))] / (2r)　（r &gt; 3 时才有实数）</span>
+      <p class="a p">它的稳定性看「一圈乘子」——把两次的导数乘起来才是周期轨道的判据（§10.1 的判据对复合映射 <em>f</em>² 用）：</p>
+      <span class="formula">μ = f′(x₊) f′(x₋) = −r² + 2r + 4</span>
+      <p class="a p">要求 |μ| &lt; 1：μ = +1 给出 <em>r</em> = 3（出生），μ = −1 给出 <em>r</em> = 1 + √6 ≈ 3.44949（失稳）。<strong>所以周期 2 的寿命正好是 3 &lt; r &lt; 3.44949</strong>——比上一段短得多。</p>
+      <p class="a p">数值核对（本章脚本）：<em>r</em> = 3.2 时 μ = +0.16（稳定）；<em>r</em> = 3.4 时 μ = −0.76（稳定但接近边缘）；<em>r</em> = 3.449 时 μ = −0.9976；<em>r</em> = 3.46 时 μ = −1.05（已失稳）。</p>
+      <p class="a p" style="color:var(--mut);font-size:13.6px">规律已经露出来了：<strong>每一级周期轨道的「寿命」都比上一级短</strong>，而它们左端点越来越密。这个几何级数的比值，就是 δ。</p>
+    </div>
+    <div class="pfoot">§10.3 逻辑斯谛映射：解析方法</div>
+  </section>
+
+  <!-- ========== 11 演示 02 ========== -->
+  <section class="page" data-title="演示 02 · 蛛网图：一步一算" data-steps="3" data-hook="cobweb">
+    <div class="page-inner">
+      <div class="split" style="grid-template-columns:1.1fr .9fr">
+        <div class="a demo">
+          <canvas id="cv2" height="380"></canvas>
+          <div class="ctrls">
+            <div class="slider"><span>r</span>
+              <input type="range" id="p2" min="0.5" max="4" step="0.01" value="2.8"><b id="p2v">2.80</b></div>
+            <button class="btn" id="reset2">重来</button>
+          </div>
+          <div class="readout" id="ro2"></div>
+        </div>
+        <div class="a">
+          <div class="steps" id="st2">
+            <div class="step on">
+              <div class="snum">01 / 03 · r = 2.8</div>
+              <h3>阶梯越缩越小</h3>
+              <p>轨道一步一步爬进不动点 <em>x</em>* = 1 − 1/<em>r</em> = 0.643。注意它是<strong>左右横跳着</strong>靠近的：<em>f</em>′ = 2 − <em>r</em> = −0.8 &lt; 0，所以每步都翻到另一边。</p>
+            </div>
+            <div class="step">
+              <div class="snum">02 / 03 · r = 3.5</div>
+              <h3>阶梯绕成一个四边形</h3>
+              <p>不动点已经不稳了，轨道绕一个多边形转：<strong>周期 4</strong>。数一数四边形的顶点，就是周期。</p>
+            </div>
+            <div class="step">
+              <div class="snum">03 / 03 · r = 3.95</div>
+              <h3>阶梯把整段填满</h3>
+              <p>轨道既不闭合也不重复，蛛网糊成一片。<strong>整条抛物线的斜率都够陡</strong>（|f′| 在中间达 2.9），误差被一路放大，这就是混沌。</p>
+            </div>
+          </div>
+          <div class="sdots" id="sd2"><i class="on"></i><i></i><i></i></div>
+          <div class="readout" style="margin-top:12px">在图上点一下 ＝ 换初始值 x₀</div>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§10.1 不动点与蛛网图</div>
+  </section>
+
+  <!-- ========== 12 周期窗口 ========== -->
+  <section class="page" data-title="§10.4 · 周期窗口：混沌里的秩序">
+    <div class="page-inner">
+      <div class="a kicker">§10.4 · 周期窗口</div>
+      <h2 class="a">混沌带里嵌着干净的周期</h2>
+      <p class="a p">把 <em>r</em> 慢慢推过 3.57，你会看到混沌带里不断冒出<strong>细窄的空白</strong>：在这些 <em>r</em> 区间里轨道又变回周期的。最宽的一条在</p>
+      <span class="formula">r = 1 + √8 ≈ 3.8284（周期 3 窗口的起点）</span>
+      <p class="a p">它的机制与前面不同：不是「倍周期」，而是<strong>周期 3 的鞍结分岔</strong>——<em>f</em>³(<em>x</em>) 的曲线与对角线<strong>相切</strong>，一下生出一对周期 3 轨道（一稳一不稳）。所以在窗口起点，乘子恰好是 +1（λ = 0）。</p>
+      <p class="a p">窗口内部也不是一片死水：把 <em>r</em> 再往上推，周期 3 会重复同样的剧本——3 → 6 → 12 → …，又一个小级联，又一个小 <em>r</em>∞。再往右，窗口被「危机」突然掐断，回到混沌。</p>
+      <div class="a card" style="border-color:rgba(232,176,75,.36);margin-top:14px">
+        <h4 style="color:#f3d79a">这一节最重要的一句话</h4>
+        <p><strong>「混沌参数区」不是一个干净的区间</strong>，而是一把筛子：里面密密麻麻全是周期窗口。你在实验里调参数，很可能恰好落进某个窗口里，看到的却是「周期 3」这种干净结果——不要因此断定「这个系统不是混沌的」。</p>
+      </div>
+      <p class="a p" style="margin-top:12px;color:var(--mut);font-size:13.6px">数值旁证（本章脚本）：λ(3.83) = −0.370（窗口内，周期 3，λ 为负）；λ(3.9) = +0.496（窗口外，混沌）。</p>
+    </div>
+    <div class="pfoot">§10.4 周期窗口</div>
+  </section>
+
+  <!-- ========== 13 李雅普诺夫指数 ========== -->
+  <section class="page" data-title="§10.5 · 李雅普诺夫指数：一步一乘">
+    <div class="page-inner">
+      <div class="split rev">
+        <div class="a fig">
+          <svg viewBox="0 0 480 320" role="img" aria-label="逻辑斯谛映射的 λ(r)"><path d="M34 150 L448 150" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.1" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><path d="M34 272 L34 30" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.1" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><path d="M31 238.5 L34 238.5" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><text x="27.0" y="241.5" fill="#8b95a4" font-size="9.2" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="end">-1.2</text><path d="M31 209.0 L34 209.0" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><text x="27.0" y="212.0" fill="#8b95a4" font-size="9.2" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="end">-0.8</text><path d="M31 179.5 L34 179.5" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><text x="27.0" y="182.5" fill="#8b95a4" font-size="9.2" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="end">-0.4</text><path d="M31 150.0 L34 150.0" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><text x="27.0" y="153.0" fill="#8b95a4" font-size="9.2" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="end">0</text><path d="M31 120.5 L34 120.5" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><text x="27.0" y="123.5" fill="#8b95a4" font-size="9.2" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="end">0.4</text><path d="M34.0 150 L34.0 153" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><text x="34.0" y="163.0" fill="#8b95a4" font-size="9.0" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">2.5</text><path d="M171.3 150 L171.3 153" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><text x="171.3" y="163.0" fill="#8b95a4" font-size="9.0" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">3</text><path d="M226.3 150 L226.3 153" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><text x="226.3" y="163.0" fill="#8b95a4" font-size="9.0" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">3.2</text><path d="M281.2 150 L281.2 153" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><text x="281.2" y="163.0" fill="#8b95a4" font-size="9.0" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">3.4</text><path d="M308.7 150 L308.7 153" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><text x="308.7" y="163.0" fill="#8b95a4" font-size="9.0" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">3.5</text><path d="M327.9 150 L327.9 153" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><text x="327.9" y="163.0" fill="#8b95a4" font-size="9.0" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">3.57</text><path d="M363.6 150 L363.6 153" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><text x="363.6" y="163.0" fill="#8b95a4" font-size="9.0" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">3.7</text><path d="M391.1 150 L391.1 153" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><text x="391.1" y="163.0" fill="#8b95a4" font-size="9.0" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">3.8</text><path d="M418.5 150 L418.5 153" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><text x="418.5" y="163.0" fill="#8b95a4" font-size="9.0" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">3.9</text><path d="M446.0 150 L446.0 153" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><text x="446.0" y="163.0" fill="#8b95a4" font-size="9.0" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">4</text><path d="M34.0 201.1 L35.1 200.5 L36.2 199.9 L37.3 199.4 L38.4 198.8 L39.5 198.2 L40.6 197.7 L41.7 197.1 L42.8 196.5 L43.9 196.0 L45.0 195.4 L46.1 194.9 L47.2 194.4 L48.3 193.8 L49.4 193.3 L50.5 192.8 L51.6 192.2 L52.7 191.7 L53.8 191.2 L54.9 190.7 L56.0 190.2 L57.1 189.7 L58.2 189.2 L59.3 188.7 L60.4 188.2 L61.5 187.7 L62.6 187.2 L63.7 186.7 L64.8 186.2 L65.9 185.7 L67.0 185.3 L68.1 184.8 L69.2 184.3 L70.3 183.8 L71.4 183.4 L72.5 182.9 L73.6 182.5 L74.7 182.0 L75.7 181.5 L76.8 181.1 L77.9 180.6 L79.0 180.2 L80.1 179.8 L81.2 179.3 L82.3 178.9 L83.4 178.4 L84.5 178.0 L85.6 177.6 L86.7 177.2 L87.8 176.7 L88.9 176.3 L90.0 175.9 L91.1 175.5 L92.2 175.1 L93.3 174.6 L94.4 174.2 L95.5 173.8 L96.6 173.4 L97.7 173.0 L98.8 172.6 L99.9 172.2 L101.0 171.8 L102.1 171.4 L103.2 171.0 L104.3 170.6 L105.4 170.2 L106.5 169.9 L107.6 169.5 L108.7 169.1 L109.8 168.7 L110.9 168.3 L112.0 167.9 L113.1 167.6 L114.2 167.2 L115.3 166.8 L116.4 166.5 L117.5 166.1 L118.6 165.7 L119.7 165.4 L120.8 165.0 L121.9 164.6 L123.0 164.3 L124.1 163.9 L125.2 163.6 L126.3 163.2 L127.4 162.9 L128.5 162.5 L129.6 162.2 L130.7 161.8 L131.8 161.5 L132.9 161.1 L134.0 160.8 L135.1 160.4 L136.2 160.1 L137.3 159.8 L138.4 159.4 L139.5 159.1 L140.6 158.8 L141.7 158.4 L142.8 158.1 L143.9 157.8 L145.0 157.4 L146.1 157.1 L147.2 156.8 L148.3 156.5 L149.4 156.1 L150.5 155.8 L151.6 155.5 L152.7 155.2 L153.8 154.9 L154.9 154.6 L156.0 154.3 L157.1 153.9 L158.1 153.6 L159.2 153.3 L160.3 153.0 L161.4 152.7 L162.5 152.4 L163.6 152.1 L164.7 151.8 L165.8 151.5 L166.9 151.2 L168.0 150.9 L169.1 150.6 L170.2 150.3 L171.3 150.1 L172.4 150.6 L173.5 151.2 L174.6 151.8 L175.7 152.4 L176.8 153.1 L177.9 153.7 L179.0 154.4 L180.1 155.1 L181.2 155.8 L182.3 156.5 L183.4 157.2 L184.5 158.0 L185.6 158.7 L186.7 159.5 L187.8 160.3 L188.9 161.1 L190.0 161.9 L191.1 162.8 L192.2 163.7 L193.3 164.6 L194.4 165.5 L195.5 166.4 L196.6 167.4 L197.7 168.4 L198.8 169.5 L199.9 170.5 L201.0 171.6 L202.1 172.8 L203.2 173.9 L204.3 175.1 L205.4 176.4 L206.5 177.7 L207.6 179.1 L208.7 180.5 L209.8 182.0 L210.9 183.5 L212.0 185.1 L213.1 186.8 L214.2 188.5 L215.3 190.4 L216.4 192.4 L217.5 194.4 L218.6 196.6 L219.7 199.0 L220.8 201.5 L221.9 204.2 L223.0 207.1 L224.1 210.3 L225.2 213.7 L226.3 217.6 L227.4 221.9 L228.5 226.8 L229.6 232.4 L230.7 239.1 L231.8 247.2 L232.9 257.8 L234.0 264.3 L235.1 264.3 L236.2 264.3 L237.3 264.3 L238.4 264.3 L239.5 258.0 L240.5 247.3 L241.6 239.0 L242.7 232.2 L243.8 226.5 L244.9 221.5 L246.0 217.1 L247.1 213.2 L248.2 209.6 L249.3 206.4 L250.4 203.4 L251.5 200.6 L252.6 198.1 L253.7 195.6 L254.8 193.4 L255.9 191.2 L257.0 189.2 L258.1 187.3 L259.2 185.4 L260.3 183.7 L261.4 182.0 L262.5 180.4 L263.6 178.9 L264.7 177.4 L265.8 176.0 L266.9 174.6 L268.0 173.3 L269.1 172.0 L270.2 170.8 L271.3 169.6 L272.4 168.4 L273.5 167.2 L274.6 166.1 L275.7 165.1 L276.8 164.0 L277.9 163.0 L279.0 162.0 L280.1 161.1 L281.2 160.1 L282.3 159.2 L283.4 158.3 L284.5 157.4 L285.6 156.6 L286.7 155.7 L287.8 154.9 L288.9 154.1 L290.0 153.3 L291.1 152.5 L292.2 151.8 L293.3 151.0 L294.4 150.3 L295.5 150.9 L296.6 152.5 L297.7 154.3 L298.8 156.3 L299.9 158.5 L301.0 161.0 L302.1 163.9 L303.2 167.5 L304.3 171.9 L305.4 177.8 L306.5 186.5 L307.6 203.8 L308.7 214.3 L309.8 189.8 L310.9 179.5 L312.0 173.0 L313.1 168.1 L314.2 164.2 L315.3 161.0 L316.4 158.3 L317.5 155.9 L318.6 153.7 L319.7 151.8 L320.8 150.1 L321.9 154.1 L322.9 162.4 L324.0 168.3 L325.1 155.6 L326.2 150.3 L327.3 152.1 L328.4 146.1 L329.5 143.4 L330.6 141.5 L331.7 142.3 L332.8 139.8 L333.9 137.6 L335.0 136.4 L336.1 136.7 L337.2 135.6 L338.3 137.6 L339.4 135.7 L340.5 135.1 L341.6 135.7 L342.7 134.9 L343.8 169.5 L344.9 151.4 L346.0 136.9 L347.1 132.5 L348.2 132.2 L349.3 132.7 L350.4 130.9 L351.5 131.5 L352.6 129.3 L353.7 130.2 L354.8 127.4 L355.9 126.4 L357.0 125.7 L358.1 124.3 L359.2 125.0 L360.3 123.8 L361.4 123.3 L362.5 123.4 L363.6 124.3 L364.7 125.7 L365.8 124.1 L366.9 123.0 L368.0 122.7 L369.1 123.3 L370.2 123.2 L371.3 121.5 L372.4 122.8 L373.5 123.1 L374.6 158.3 L375.7 144.6 L376.8 126.8 L377.9 123.6 L379.0 120.0 L380.1 122.6 L381.2 120.7 L382.3 121.1 L383.4 121.5 L384.5 125.1 L385.6 119.0 L386.7 119.8 L387.8 119.4 L388.9 119.0 L390.0 119.0 L391.1 119.0 L392.2 119.0 L393.3 119.0 L394.4 119.0 L395.5 119.0 L396.6 119.2 L397.7 120.0 L398.8 129.4 L399.9 248.0 L401.0 167.0 L402.1 153.3 L403.2 170.7 L404.3 154.5 L405.3 140.0 L406.4 152.5 L407.5 120.6 L408.6 119.5 L409.7 119.0 L410.8 119.0 L411.9 119.0 L413.0 119.0 L414.1 119.0 L415.2 119.0 L416.3 119.0 L417.4 119.0 L418.5 119.0 L419.6 119.0 L420.7 119.0 L421.8 119.0 L422.9 119.0 L424.0 119.0 L425.1 119.0 L426.2 119.0 L427.3 119.0 L428.4 119.0 L429.5 119.0 L430.6 119.0 L431.7 119.0 L432.8 119.0 L433.9 119.0 L435.0 119.0 L436.1 119.0 L437.2 119.0 L438.3 119.0 L439.4 119.0 L440.5 119.0 L441.6 119.0 L442.7 119.0 L443.8 119.0 L444.9 119.0 L446.0 119.0" fill="none" stroke="#62d0ff" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M34 150 L448 150" fill="none" stroke="rgba(232,176,75,.6)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="1.0" stroke-dasharray="4 3"/><path d="M327.9 150 L327.9 44" fill="none" stroke="rgba(255,151,112,.85)" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round" opacity="1.0" stroke-dasharray="4 4"/><text x="331.9" y="40.0" fill="#ff9770" font-size="9.2" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="start">r∞ ≈ 3.5699</text><text x="240.0" y="20.0" fill="#8b95a4" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">逻辑斯谛映射的 λ(r)：正数＝混沌</text><text x="240.0" y="300.0" fill="rgba(139,149,164,.95)" font-size="9.2" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">λ 降到零以下的窄条就是周期窗口（最宽的一条在 r ≈ 3.83）</text><text x="16.0" y="40.0" fill="#8b95a4" font-size="9.4" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="start">λ</text><text x="440.0" y="164.0" fill="#8b95a4" font-size="9.4" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="end">r</text></svg>
+          <div class="figcap">数值扫描（376 个 <em>r</em> 值，每点 900 步平均、1500 步暂态）。λ &gt; 0 的区间是混沌；λ 掉到零以下的窄条就是周期窗口。红虚线是 <em>r</em>∞ ≈ 3.5699；注意它右边立刻就是混沌带，左边 λ 一直是负的。</div>
+        </div>
+        <div>
+          <div class="a kicker">§10.5 · 李雅普诺夫指数</div>
+          <h2 class="a">把每步的放大倍数乘起来</h2>
+          <p class="a p">一维映射上，误差每步乘 <em>f</em>′。走 <em>N</em> 步之后误差是乘积，取对数再除以 <em>N</em>：</p>
+          <span class="formula">λ = lim<sub>N→∞</sub> (1/N) Σ<sub>k=0</sub><sup>N−1</sup> ln|f′(x<sub>k</sub>)|</span>
+          <p class="a p">与第 9 章洛伦兹映射完全同一个公式——只是那里 <em>f</em> 是算出来的帐篷形，这里是显式的抛物线。λ &gt; 0 是混沌的<strong>定量判据</strong>；λ = 0 通常对应周期轨道（或临界情形）；λ &lt; 0 是稳定不动点或稳定周期轨道。</p>
+          <p class="a p">本章数值（脚本）：λ(2.8) = −0.223、λ(3.5) = −0.873、λ(3.83) = −0.370、λ(3.9) = +0.496、<strong>λ(4) = 0.693144 ≈ ln2</strong>。最后一个不是巧合——下一页的推导会给出它的精确值。</p>
+          <p class="a p" style="color:var(--mut);font-size:13.4px">实用提醒：算 λ 时暂态必须够长（本章用 1500 步），否则会测到暂态的增长率；平均步数也要够（900 步以上），否则窗口附近的符号会抖。</p>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§10.5 李雅普诺夫指数</div>
+  </section>
+
+  <!-- ========== 14 从 λ(r) 读出的三件事 ========== -->
+  <section class="page" data-title="§10.5 · 从 λ(r) 图上读出三件事">
+    <div class="page-inner">
+      <div class="a kicker">§10.5 · 读图</div>
+      <h2 class="a">一张 λ(r)，三种结构</h2>
+      <div class="split" style="margin-top:12px;gap:14px">
+        <div>
+          <div class="a card" style="margin-bottom:10px;border-color:rgba(79,191,168,.4)">
+            <h4 style="color:#a8e3d6">① 左侧的长负区</h4>
+            <p>2.5 &lt; <em>r</em> &lt; 3.57 之间 λ 基本为负：不动点或稳定周期轨道。越接近 3.57，λ 越贴近零——<strong>稳定性在变弱</strong>，这是级联堆积的前兆。</p>
+          </div>
+          <div class="a card" style="margin-bottom:10px;border-color:rgba(232,176,75,.4)">
+            <h4 style="color:#f3d79a">② r∞ 右边的锯齿</h4>
+            <p>3.57 之后 λ 在正负之间剧烈锯齿：正的段是混沌带，负的尖谷是周期窗口。锯齿本身就是分形结构——放大任意一段，形状相似。</p>
+          </div>
+          <div class="a card">
+            <h4>③ 峰值在 r = 4 附近</h4>
+            <p>λ 的最大值出现在 <em>r</em> = 4：正好等于 ln 2 ≈ 0.693。这是本章唯一能<strong>精确算出来</strong>的 λ，下一节的推导给它。</p>
+          </div>
+        </div>
+        <div class="a card" style="align-self:center;border-color:rgba(98,208,255,.3)">
+          <h4 style="color:#bfe6ff">λ 与「可预测时间」</h4>
+          <p>λ 的单位是「每步的奈培（nat）」。想把误差放大到 O(1)，需要 <em>n</em> ≈ ln(1/δ₀)/λ 步。</p>
+          <p>λ = 0.69 时，初始误差 10⁻⁶ 大约在 <strong>20 步</strong>后长到 O(1)；λ = 0.5 时要 28 步。<strong>这就是「混沌的时间尺度」</strong>——用它来设计控制系统、判断采样频率都直接可用。</p>
+        </div>
+      </div>
+      <p class="a p" style="margin-top:18px;color:var(--mut);font-size:13.6px">注意对比：第 9 章洛伦兹的 λ ≈ 0.92 是<strong>每个时间单位</strong>；这里 0.69 是<strong>每步</strong>。两者不能直接比大小，先要统一成「每单位时间」——这正是第 9 章用 λ<sub>map</sub>/T̄ 换算的原因。</p>
+    </div>
+    <div class="pfoot">§10.5 李雅普诺夫指数</div>
+  </section>
+
+  <!-- ========== 15 推导 1 ========== -->
+  <section class="page" data-title="完整推导 1 · 不动点、2 周期与稳定区">
+    <div class="page-inner">
+      <div class="a kicker">PROOF 01 · 出发点 → 步骤 → 退化自检 → 边界</div>
+      <h2 class="a">把前两级周期轨道的稳定区算干净</h2>
+      <details class="a" open style="margin-top:14px">
+        <summary><span class="tag blue">完整推导</span>x* = 1−1/r 与 2 周期 x± 的稳定性，r = 3 与 r = 1+√6 的来历</summary>
+        <div class="body proofs">
+          <p><b>出发点．</b>x<sub>n+1</sub> = f(x<sub>n</sub>)，f(x) = rx(1−x)，0 ≤ r ≤ 4。</p>
+          <p><span class="stepnum">1</span><b>不动点．</b>x = rx(1−x) ⇒ x[1 − r(1−x)] = 0 ⇒ x* = 0 或 x* = 1 − 1/r。（后者在 [0,1] 内要求 r ≥ 1。）</p>
+          <p><span class="stepnum">2</span><b>不动点的稳定性．</b>f′(x) = r(1−2x)：f′(0) = r，f′(1−1/r) = r(1 − 2 + 2/r) = 2 − r。由 §10.1，|·| &lt; 1 即稳定：原点稳定 ⇔ 0 &lt; r &lt; 1；非零不动点稳定 ⇔ |2−r| &lt; 1 ⇔ 1 &lt; r &lt; 3。</p>
+          <p><span class="stepnum">3</span><b>解 2 周期．</b>f²(x) − x 是四次多项式，已知它含因子 x 与 [x − (1−1/r)]（不动点）。把这两因子除出来，剩下的二次式是</p>
+          <span class="formula">r²x² − r(r+1)x + (r+1) = 0</span>
+          <p>求根得 x<sub>±</sub> = [(r+1) ± √((r−3)(r+1))]/(2r)。判别式要求 r ≥ 3（与第 2 步的失稳点一致）。</p>
+          <p><span class="stepnum">4</span><b>2 周期的乘子．</b>对复合映射 f² 用判据，乘子是两点的导数之积：</p>
+          <span class="formula">μ = f′(x₊)f′(x₋) = r²(1−2x₊)(1−2x₋)</span>
+          <p>用韦达定理：(1−2x₊)(1−2x₋) = 1 − 2(x₊+x₋) + 4x₊x₋，而 x₊+x₋ = (r+1)/r、x₊x₋ = (r+1)/r²。代入化简：</p>
+          <span class="formula">μ = r² − 2r(r+1) + 4(r+1) = −r² + 2r + 4</span>
+          <p><span class="stepnum">5</span><b>稳定区间．</b>|μ| &lt; 1 即 −1 &lt; −r²+2r+4 &lt; 1：上界给 r² − 2r − 3 &gt; 0 ⇒ r &gt; 3（正是出生点）；下界给 r² − 2r − 5 &lt; 0 ⇒ r &lt; 1 + √6 ≈ 3.44949。<b>所以 2 周期只在 3 &lt; r &lt; 1+√6 内稳定。</b></p>
+          <p><b>退化自检．</b>取 r = 3：x<sub>±</sub> 的判别式为零，两根合并为 2/3——正好等于不动点 1−1/3 = 2/3 ✓（2 周期在分岔点上与不动点重合）。同时 μ = +1 ✓。再取 r → 1：x* → 0，非零不动点与原点合并，与「r = 1 处跨临界」一致 ✓。</p>
+          <p><b>边界．</b>① 这里只说「稳定/不稳」，没给收敛速率——那是 μ 的绝对值（τ = −1/ln|μ| 步衰减 e 倍）。② 乘子恰好为 ±1 时线性化失效，需要更高阶分析（在 r = 3 与 r = 1+√6 两点正是如此，靠的是分岔理论而不是导数）。③ 这套算法对 4 周期、8 周期原则上都能用，但多项式次数指数增长，实际靠数值（本章脚本用二分法直接找超稳定参数）。</p>
+        </div>
+      </details>
+    </div>
+    <div class="pfoot">§10.3 逻辑斯谛映射：解析方法</div>
+  </section>
+
+  <!-- ========== 16 推导 2 ========== -->
+  <section class="page" data-title="完整推导 2 · r = 4 与帐篷映射共轭">
+    <div class="page-inner">
+      <div class="a kicker">PROOF 02 · 换一个变量，混沌就现出原形</div>
+      <h2 class="a">为什么 λ(r=4) 正好等于 ln 2</h2>
+      <details class="a" open style="margin-top:14px">
+        <summary><span class="tag blue">完整推导</span>共轭变换 x = sin²(πθ/2)，把抛物线变成帐篷</summary>
+        <div class="body proofs">
+          <p><b>出发点．</b>r = 4 时 f(x) = 4x(1−x)。要证明：在变量替换 x = sin²(πθ/2) 之下，它等价于帐篷映射 T(θ) = 1 − |2θ − 1|（θ ∈ [0,1]）。</p>
+          <p><span class="stepnum">1</span><b>代进去算．</b>令 x = sin²(πθ/2)。则</p>
+          <span class="formula">4x(1−x) = 4 sin²(πθ/2) cos²(πθ/2) = [2 sin(πθ/2)cos(πθ/2)]² = sin²(πθ)</span>
+          <p>（用了 sin 2α = 2 sin α cos α 与 (sin α cos α)² 的配方。）</p>
+          <p><span class="stepnum">2</span><b>读出 θ 的演化．</b>sin²(πθ) = sin²(πθ′) 给出 θ′ = 2θ 或 θ′ = 2 − 2θ（在 [0,1] 上就是 <em>折回</em>）。合并写成</p>
+          <span class="formula">θ<sub>n+1</sub> = 2θ<sub>n</sub> (mod 1)　⇔　T(θ) = 1 − |2θ − 1|</span>
+          <p>这正是帐篷映射。<b>抛物线被「拉直」成了两段斜率为 ±2 的直线。</b></p>
+          <p><span class="stepnum">3</span><b>算 λ．</b>帐篷映射处处 |T′| = 2（除中点），所以</p>
+          <span class="formula">λ<sub>tent</sub> = ⟨ln 2⟩ = ln 2</span>
+          <p>又因为 x = sin²(πθ/2) 是光滑可逆变换，它不改变<strong>指数</strong>（每步的对数增量只差一个有界量，取平均后消失）。所以 λ<sub>logistic</sub>(r=4) = ln 2。<b>数值核对：本章脚本测得 0.693144，与 ln 2 = 0.693147 相差 3×10⁻⁶。</b></p>
+          <p><span class="stepnum">4</span><b>顺带拿到不变密度．</b>帐篷映射把均匀分布映成均匀分布（两段斜率都是 ±2，每段保测度、两段各占一半），θ 服从均匀分布。换回 x 用变量替换法则：</p>
+          <span class="formula">ρ(x) = ρ(θ)|dθ/dx| = 1/(π√(x(1−x)))</span>
+          <p><b>数值核对：本章 20 万步的直方图与这条曲线完全重合（图见下页）。</b></p>
+          <p><b>退化自检．</b>θ = 1/2 ⇒ x = sin²(π/4) = 1/2，而帐篷映射的不动点 θ = 0 对应 x = 0 ✓；θ = 1 也映到 x = 1 ✓。端点对得上，说明变换是双射（除端点外）。</p>
+          <p><b>失效边界．</b>① 这个技巧只对 <em>r</em> = 4 成立；<em>r</em> &lt; 4 时抛物线的像不是整段 [0,1]，帐篷映射的共轭要换成别的（用 Chebyshev 多项式或数值）。② 「共轭」保的是拓扑与指数，<strong>不保具体数值</strong>：x<sub>n</sub> 与 θ<sub>n</sub> 不是线性对应，别拿它们相互换算轨道。</p>
+        </div>
+      </details>
+    </div>
+    <div class="pfoot">§10.3 逻辑斯谛映射：解析方法</div>
+  </section>
+
+  <!-- ========== 17 不变密度 ========== -->
+  <section class="page" data-title="§10.3 · r = 4 的不变密度">
+    <div class="page-inner">
+      <div class="split">
+        <div>
+          <div class="a kicker">§10.3 · 一条可以验证的曲线</div>
+          <h2 class="a">轨道不是均匀铺满的</h2>
+          <p class="a p">上面那幅数值图很值得盯着看：<strong>两端高、中间低</strong>。也就是说，r = 4 时轨道在 0 和 1 附近逗留的时间远多于在 1/2 附近。</p>
+          <p class="a p">这不奇怪：抛物线在 <em>x</em> = 1/2 处最平（导数 0），附近的点被「挤」得很快离开；而在两端附近曲线很陡，点被「摊」得很开、走得慢。密度正好反映了这件事。</p>
+          <p class="a p">更重要的是：<strong>这条密度是可以算出来的</strong>——就是上一页推导出的 1/(π√(<em>x</em>(1−<em>x</em>)))。</p>
+          <p class="a p">为什么值得关心？因为「混沌」常被误解成「均匀随机」。这条曲线说明：<strong>混沌有自己的统计规律</strong>，而且这个规律可以解析地写下来、被 20 万步的数值实验验证到小数点后几位。</p>
+        </div>
+        <div class="a fig">
+          <svg viewBox="0 0 480 320" role="img" aria-label="r=4 的不变密度：数值与解析对照"><path d="M40.0 262.0 L440.0 262.0" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.1" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><path d="M40.0 262.0 L40.0 44.0" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.1" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><rect x="40.6" y="32.0" width="5.0" height="230.0" fill="#62d0ff" opacity=".55"/><rect x="46.9" y="163.6" width="5.0" height="98.4" fill="#62d0ff" opacity=".55"/><rect x="53.1" y="187.4" width="5.0" height="74.6" fill="#62d0ff" opacity=".55"/><rect x="59.4" y="195.4" width="5.0" height="66.6" fill="#62d0ff" opacity=".55"/><rect x="65.6" y="205.5" width="5.0" height="56.5" fill="#62d0ff" opacity=".55"/><rect x="71.8" y="208.2" width="5.0" height="53.8" fill="#62d0ff" opacity=".55"/><rect x="78.1" y="214.1" width="5.0" height="47.9" fill="#62d0ff" opacity=".55"/><rect x="84.3" y="218.1" width="5.0" height="43.9" fill="#62d0ff" opacity=".55"/><rect x="90.6" y="218.7" width="5.0" height="43.3" fill="#62d0ff" opacity=".55"/><rect x="96.8" y="220.5" width="5.0" height="41.5" fill="#62d0ff" opacity=".55"/><rect x="103.1" y="224.5" width="5.0" height="37.5" fill="#62d0ff" opacity=".55"/><rect x="109.3" y="224.3" width="5.0" height="37.7" fill="#62d0ff" opacity=".55"/><rect x="115.6" y="223.9" width="5.0" height="38.1" fill="#62d0ff" opacity=".55"/><rect x="121.8" y="224.7" width="5.0" height="37.3" fill="#62d0ff" opacity=".55"/><rect x="128.1" y="227.3" width="5.0" height="34.7" fill="#62d0ff" opacity=".55"/><rect x="134.3" y="229.5" width="5.0" height="32.5" fill="#62d0ff" opacity=".55"/><rect x="140.6" y="228.3" width="5.0" height="33.7" fill="#62d0ff" opacity=".55"/><rect x="146.8" y="229.3" width="5.0" height="32.7" fill="#62d0ff" opacity=".55"/><rect x="153.1" y="229.8" width="5.0" height="32.2" fill="#62d0ff" opacity=".55"/><rect x="159.3" y="230.0" width="5.0" height="32.0" fill="#62d0ff" opacity=".55"/><rect x="165.6" y="229.0" width="5.0" height="33.0" fill="#62d0ff" opacity=".55"/><rect x="171.8" y="231.3" width="5.0" height="30.7" fill="#62d0ff" opacity=".55"/><rect x="178.1" y="230.2" width="5.0" height="31.8" fill="#62d0ff" opacity=".55"/><rect x="184.3" y="232.3" width="5.0" height="29.7" fill="#62d0ff" opacity=".55"/><rect x="190.6" y="231.5" width="5.0" height="30.5" fill="#62d0ff" opacity=".55"/><rect x="196.8" y="232.6" width="5.0" height="29.4" fill="#62d0ff" opacity=".55"/><rect x="203.1" y="233.8" width="5.0" height="28.2" fill="#62d0ff" opacity=".55"/><rect x="209.3" y="231.2" width="5.0" height="30.8" fill="#62d0ff" opacity=".55"/><rect x="215.6" y="232.5" width="5.0" height="29.5" fill="#62d0ff" opacity=".55"/><rect x="221.8" y="231.1" width="5.0" height="30.9" fill="#62d0ff" opacity=".55"/><rect x="228.1" y="233.1" width="5.0" height="28.9" fill="#62d0ff" opacity=".55"/><rect x="234.3" y="232.6" width="5.0" height="29.4" fill="#62d0ff" opacity=".55"/><rect x="240.6" y="231.7" width="5.0" height="30.3" fill="#62d0ff" opacity=".55"/><rect x="246.8" y="233.0" width="5.0" height="29.0" fill="#62d0ff" opacity=".55"/><rect x="253.1" y="233.3" width="5.0" height="28.7" fill="#62d0ff" opacity=".55"/><rect x="259.4" y="232.8" width="5.0" height="29.2" fill="#62d0ff" opacity=".55"/><rect x="265.6" y="233.6" width="5.0" height="28.4" fill="#62d0ff" opacity=".55"/><rect x="271.9" y="233.4" width="5.0" height="28.6" fill="#62d0ff" opacity=".55"/><rect x="278.1" y="232.1" width="5.0" height="29.9" fill="#62d0ff" opacity=".55"/><rect x="284.4" y="231.6" width="5.0" height="30.4" fill="#62d0ff" opacity=".55"/><rect x="290.6" y="231.7" width="5.0" height="30.3" fill="#62d0ff" opacity=".55"/><rect x="296.9" y="231.4" width="5.0" height="30.6" fill="#62d0ff" opacity=".55"/><rect x="303.1" y="230.9" width="5.0" height="31.1" fill="#62d0ff" opacity=".55"/><rect x="309.4" y="229.9" width="5.0" height="32.1" fill="#62d0ff" opacity=".55"/><rect x="315.6" y="229.6" width="5.0" height="32.4" fill="#62d0ff" opacity=".55"/><rect x="321.9" y="230.6" width="5.0" height="31.4" fill="#62d0ff" opacity=".55"/><rect x="328.1" y="230.1" width="5.0" height="31.9" fill="#62d0ff" opacity=".55"/><rect x="334.4" y="230.1" width="5.0" height="31.9" fill="#62d0ff" opacity=".55"/><rect x="340.6" y="228.7" width="5.0" height="33.3" fill="#62d0ff" opacity=".55"/><rect x="346.9" y="227.7" width="5.0" height="34.3" fill="#62d0ff" opacity=".55"/><rect x="353.1" y="225.9" width="5.0" height="36.1" fill="#62d0ff" opacity=".55"/><rect x="359.4" y="226.1" width="5.0" height="35.9" fill="#62d0ff" opacity=".55"/><rect x="365.6" y="225.1" width="5.0" height="36.9" fill="#62d0ff" opacity=".55"/><rect x="371.9" y="221.9" width="5.0" height="40.1" fill="#62d0ff" opacity=".55"/><rect x="378.1" y="220.4" width="5.0" height="41.6" fill="#62d0ff" opacity=".55"/><rect x="384.4" y="217.8" width="5.0" height="44.2" fill="#62d0ff" opacity=".55"/><rect x="390.6" y="215.6" width="5.0" height="46.4" fill="#62d0ff" opacity=".55"/><rect x="396.9" y="212.6" width="5.0" height="49.4" fill="#62d0ff" opacity=".55"/><rect x="403.1" y="209.3" width="5.0" height="52.7" fill="#62d0ff" opacity=".55"/><rect x="409.4" y="205.4" width="5.0" height="56.6" fill="#62d0ff" opacity=".55"/><rect x="415.6" y="197.1" width="5.0" height="64.9" fill="#62d0ff" opacity=".55"/><rect x="421.9" y="187.1" width="5.0" height="74.9" fill="#62d0ff" opacity=".55"/><rect x="428.1" y="165.5" width="5.0" height="96.5" fill="#62d0ff" opacity=".55"/><rect x="434.4" y="32.0" width="5.0" height="230.0" fill="#62d0ff" opacity=".55"/><path d="M44.8 127.5 L46.4 145.5 L48.1 157.8 L49.7 166.7 L51.3 173.7 L52.9 179.2 L54.6 183.8 L56.2 187.7 L57.8 191.0 L59.4 193.9 L61.1 196.4 L62.7 198.7 L64.3 200.7 L65.9 202.5 L67.6 204.2 L69.2 205.7 L70.8 207.1 L72.5 208.4 L74.1 209.6 L75.7 210.6 L77.3 211.7 L79.0 212.6 L80.6 213.5 L82.2 214.3 L83.8 215.1 L85.5 215.9 L87.1 216.6 L88.7 217.2 L90.3 217.9 L92.0 218.5 L93.6 219.0 L95.2 219.6 L96.9 220.1 L98.5 220.6 L100.1 221.0 L101.7 221.5 L103.4 221.9 L105.0 222.3 L106.6 222.7 L108.2 223.1 L109.9 223.4 L111.5 223.8 L113.1 224.1 L114.7 224.4 L116.4 224.7 L118.0 225.0 L119.6 225.3 L121.3 225.6 L122.9 225.9 L124.5 226.1 L126.1 226.4 L127.8 226.6 L129.4 226.9 L131.0 227.1 L132.6 227.3 L134.3 227.5 L135.9 227.7 L137.5 227.9 L139.1 228.1 L140.8 228.3 L142.4 228.4 L144.0 228.6 L145.7 228.8 L147.3 228.9 L148.9 229.1 L150.5 229.3 L152.2 229.4 L153.8 229.5 L155.4 229.7 L157.0 229.8 L158.7 229.9 L160.3 230.1 L161.9 230.2 L163.5 230.3 L165.2 230.4 L166.8 230.5 L168.4 230.6 L170.1 230.7 L171.7 230.8 L173.3 230.9 L174.9 231.0 L176.6 231.1 L178.2 231.2 L179.8 231.3 L181.4 231.4 L183.1 231.5 L184.7 231.5 L186.3 231.6 L187.9 231.7 L189.6 231.7 L191.2 231.8 L192.8 231.9 L194.5 231.9 L196.1 232.0 L197.7 232.0 L199.3 232.1 L201.0 232.1 L202.6 232.2 L204.2 232.2 L205.8 232.3 L207.5 232.3 L209.1 232.4 L210.7 232.4 L212.3 232.4 L214.0 232.5 L215.6 232.5 L217.2 232.5 L218.9 232.6 L220.5 232.6 L222.1 232.6 L223.7 232.6 L225.4 232.6 L227.0 232.7 L228.6 232.7 L230.2 232.7 L231.9 232.7 L233.5 232.7 L235.1 232.7 L236.7 232.7 L238.4 232.7 L240.0 232.7 L241.6 232.7 L243.3 232.7 L244.9 232.7 L246.5 232.7 L248.1 232.7 L249.8 232.7 L251.4 232.7 L253.0 232.7 L254.6 232.6 L256.3 232.6 L257.9 232.6 L259.5 232.6 L261.1 232.6 L262.8 232.5 L264.4 232.5 L266.0 232.5 L267.7 232.4 L269.3 232.4 L270.9 232.4 L272.5 232.3 L274.2 232.3 L275.8 232.2 L277.4 232.2 L279.0 232.1 L280.7 232.1 L282.3 232.0 L283.9 232.0 L285.5 231.9 L287.2 231.9 L288.8 231.8 L290.4 231.7 L292.1 231.7 L293.7 231.6 L295.3 231.5 L296.9 231.5 L298.6 231.4 L300.2 231.3 L301.8 231.2 L303.4 231.1 L305.1 231.0 L306.7 230.9 L308.3 230.8 L309.9 230.7 L311.6 230.6 L313.2 230.5 L314.8 230.4 L316.5 230.3 L318.1 230.2 L319.7 230.1 L321.3 229.9 L323.0 229.8 L324.6 229.7 L326.2 229.5 L327.8 229.4 L329.5 229.3 L331.1 229.1 L332.7 228.9 L334.3 228.8 L336.0 228.6 L337.6 228.4 L339.2 228.3 L340.9 228.1 L342.5 227.9 L344.1 227.7 L345.7 227.5 L347.4 227.3 L349.0 227.1 L350.6 226.9 L352.2 226.6 L353.9 226.4 L355.5 226.1 L357.1 225.9 L358.7 225.6 L360.4 225.3 L362.0 225.0 L363.6 224.7 L365.3 224.4 L366.9 224.1 L368.5 223.8 L370.1 223.4 L371.8 223.1 L373.4 222.7 L375.0 222.3 L376.6 221.9 L378.3 221.5 L379.9 221.0 L381.5 220.6 L383.1 220.1 L384.8 219.6 L386.4 219.0 L388.0 218.5 L389.7 217.9 L391.3 217.2 L392.9 216.6 L394.5 215.9 L396.2 215.1 L397.8 214.3 L399.4 213.5 L401.0 212.6 L402.7 211.7 L404.3 210.6 L405.9 209.6 L407.5 208.4 L409.2 207.1 L410.8 205.7 L412.4 204.2 L414.1 202.5 L415.7 200.7 L417.3 198.7 L418.9 196.4 L420.6 193.9 L422.2 191.0 L423.8 187.7 L425.4 183.8 L427.1 179.2 L428.7 173.7 L430.3 166.7 L431.9 157.8 L433.6 145.5 L435.2 127.5" fill="none" stroke="#e8b04b" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1.0"/><path d="M40.0 32 L440.0 32" fill="none" stroke="rgba(255,255,255,.14)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="1.0" stroke-dasharray="3 4"/><text x="436.0" y="26.0" fill="rgba(139,149,164,.9)" font-size="8.8" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="end">密度 5 处截断</text><text x="40.0" y="276.0" fill="#8b95a4" font-size="9.2" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">0</text><text x="240.0" y="276.0" fill="#8b95a4" font-size="9.2" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">0.5</text><text x="440.0" y="276.0" fill="#8b95a4" font-size="9.2" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">1</text><text x="240.0" y="24.0" fill="#8b95a4" font-size="9.8" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">r = 4 时的不变密度：数值直方图（蓝）与 1/(π√(x(1−x)))（金）</text><text x="240.0" y="300.0" fill="rgba(139,149,164,.95)" font-size="9.2" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">两端发散、中间见底——这不是均匀分布，但仍是一个确定的、可积的密度</text><text x="18.0" y="50.0" fill="#8b95a4" font-size="9.2" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="start">密度</text><text x="438.0" y="276.0" fill="#8b95a4" font-size="9.4" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="end">x</text></svg>
+          <div class="figcap">r = 4，20 万步迭代的直方图（64 个格，蓝）与解析密度 1/(π√(<em>x</em>(1−<em>x</em>)))（金）。两端发散，为了能画出来，超过 5 的部分截断（横虚线）。</div>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§10.3 逻辑斯谛映射：解析方法</div>
+  </section>
+
+  <!-- ========== 18 共轭映射 ========== -->
+  <section class="page" data-title="§10.6 · 共轭映射：换个坐标，动力学不变">
+    <div class="page-inner">
+      <div class="a kicker">§10.6 · 共轭（conjugacy）</div>
+      <h2 class="a">长得不一样，动力学一样</h2>
+      <p class="a p">上一页的 <em>x</em> = sin²(πθ/2) 做了一件很划算的事：把一条<strong>抛物线</strong>变成了一把<strong>折线</strong>。写成定义：若存在可逆的 <em>h</em> 使</p>
+      <span class="formula">h( f(x) ) = g( h(x) )　⇔　f = h⁻¹ ∘ g ∘ h</span>
+      <p class="a p">就说 <em>f</em> 与 <em>g</em> <strong>共轭</strong>。这时「先迭代 <em>f</em> 再换坐标」与「先换坐标再迭代 <em>g</em>」结果相同——两条轨道被 <em>h</em> 一一对应。</p>
+      <p class="a p">共轭<strong>保</strong>什么：不动点与周期的个数、周期轨道的稳定性（乘子相同）、李雅普诺夫指数（相差一个取平均后消失的有界量）、以及「混沌/不混沌」这个定性结论。共轭<strong>不保</strong>什么：具体的数值、轨道在坐标轴上的位置、以及不变的密度（密度要按 |d<em>h</em>/d<em>x</em>| 换算）。</p>
+      <div class="split" style="margin-top:14px;gap:14px">
+        <div class="a card">
+          <h4>为什么这个工具值钱</h4>
+          <p>它让你可以<strong>挑一个最容易算的代表</strong>。r = 4 的抛物线难算，帐篷映射 |T′| = 2 处处成立、λ = ln 2 一步就有；算完再用 <em>h</em> 换回去。<strong>这就是「换个坐标把问题变简单」的标准用法。</strong></p>
+        </div>
+        <div class="a card" style="border-color:rgba(255,151,112,.34)">
+          <h4 style="color:#ffc3ad">边界</h4>
+          <p>共轭要求 <em>h</em> 可逆且足够光滑。若 <em>h</em> 只是连续而不是可微（数学上叫拓扑共轭），指数就可能对不上——那时只能保证「有没有混沌」，不能保证「混沌多快」。</p>
+        </div>
+      </div>
+      <p class="a p" style="margin-top:16px">下一章的维数会和这一页再碰一次：<strong>共轭不保长度，但保「是不是分形」</strong>。所以康托尔集可以和别的集合共轭，而维数照样能算。</p>
+    </div>
+    <div class="pfoot">§10.6 普适性与实验</div>
+  </section>
+
+  <!-- ========== 19 普适性 ========== -->
+  <section class="page" data-title="§10.6 · 普适性：δ 和 α">
+    <div class="page-inner">
+      <div class="a kicker">§10.6 · 普适性与实验</div>
+      <h2 class="a">两个数，与函数长什么样无关</h2>
+      <p class="a p">倍周期级联里，第 <em>n</em> 级分岔点 <em>r</em><sub>n</sub> 的间距之比趋于一个常数：</p>
+      <span class="formula">δ = lim<sub>n→∞</sub> (r<sub>n−1</sub> − r<sub>n−2</sub>) / (r<sub>n</sub> − r<sub>n−1</sub>) = 4.669201…</span>
+      <p class="a p">另一个常数管「几何缩水率」：每一级周期的轨道在 <em>x</em> 方向比上一级窄多少倍：α = 2.50290…</p>
+      <div class="a card" style="margin:14px 0;border-color:rgba(232,176,75,.4)">
+        <h4 style="color:#f3d79a">本章脚本的数值（用「超稳定参数」序列，二分法求解）</h4>
+        <p style="font:12px/1.95 var(--mono);color:var(--mut)">
+          周期 2　r = 3.236067977<br>
+          周期 4　r = 3.498561699<br>
+          周期 8　r = 3.554640863<br>
+          周期 16　r = 3.566667380<br>
+          周期 32　r = 3.569243532<br>
+          周期 64　r = 3.569795294<br>
+          周期 128　r = 3.569913465<br><br>
+          δ 序列：4.681　4.663　4.668　4.669<br>
+          α 序列：2.655　2.532　2.509　2.504　2.5032　2.5030
+        </p>
+        <p style="margin-top:8px">δ 与 α 都在向 4.6692 与 2.5029 收敛，误差随级数下降。<strong>这两个数列就是「普适」的直接证据。</strong></p>
+        <p style="margin-top:6px;color:#c3cad6">复算提示：α 的后几级对参数精度极敏感（第 5 级的间距 d₅ ≈ 1e−9），<strong>r 必须二分到浮点极限再取</strong>；用四舍五入到 9 位小数的 r 会把最后两位 α 污染掉。</p>
+      </div>
+      <p class="a p"><strong>「普适」到底什么意思：</strong>把抛物线换成任何单峰、二次的映射（例如 <em>r</em> sin(π<em>x</em>)、或者物理实验里测出来的传递函数），只要它有倍周期级联，<strong>δ 和 α 就是同样两个数</strong>。具体函数只影响前几级和整体位置。</p>
+      <p class="a p" style="color:var(--mut);font-size:13.6px">边界：普适性只对「单峰、二次（或更一般：同一普适类）」的映射成立。多峰映射、或者峰不光滑（例如帐篷映射的尖峰），δ 与 α 都会变。</p>
+    </div>
+    <div class="pfoot">§10.6 普适性与实验</div>
+  </section>
+
+  <!-- ========== 19 实验证据 ========== -->
+  <section class="page" data-title="§10.6 · 实验里真的看到了吗">
+    <div class="page-inner">
+      <div class="a kicker">§10.6 · 实验</div>
+      <h2 class="a">在电路、流体、化学里都量到了 δ</h2>
+      <p class="a p">理论说 δ = 4.669，那实验能测出来吗？能——只要实验里存在「倍周期通向混沌」的路径。被反复验证过的几类系统：</p>
+      <div class="split" style="margin-top:12px;gap:14px">
+        <div class="a card" style="margin-bottom:10px">
+          <h4>受迫非线性电路</h4>
+          <p>二极管–电感–电容这类非线性振荡电路，加上周期驱动，随驱动幅度上升会经历倍周期级联，测得的 δ 与 4.669 相符。</p>
+        </div>
+        <div class="a card" style="margin-bottom:10px">
+          <h4>瑞利–贝纳德对流</h4>
+          <p>第 9 章洛伦兹模型所描述的那类对流系统：在特定几何与参数下，实验上（瑞利–贝纳德对流装置）确实测到倍周期级联，δ 接近 4.669。注意模型不是实验——是实验去印证模型的预言。</p>
+        </div>
+      </div>
+      <p class="a p"><strong>为什么这类实验难做：</strong>① 要能稳定地调参数并重复；② 级联越往后越密，δ 的收敛需要测到很后面的几级，而噪声会把窗口抹掉；③ 实验系统永远有三维以上的自由度，严格的「一维映射」只是它在某个截面上的近似。</p>
+      <p class="a p"><strong>为什么还是值得信：</strong>因为 δ 的普适性像是「指纹」——如果在一类完全不同的系统里量到同一个 4.669，那说明背后确实是同一条倍周期机制，而不是巧合。</p>
+      <p class="a p" style="color:var(--mut);font-size:13.6px">本节只做定性叙述，不给具体实验数值：不同装置的测量精度与条件差别很大，把数字抄进来反而容易误导。要查数值请看原书 §10.6 列出的原始文献。</p>
+    </div>
+    <div class="pfoot">§10.6 普适性与实验</div>
+  </section>
+
+  <!-- ========== 20 重整化 ========== -->
+  <section class="page" data-title="§10.7 · 重整化：普适性为什么成立">
+    <div class="page-inner">
+      <div class="a kicker">§10.7 · 重整化</div>
+      <h2 class="a">把「看两次」当成「看一次」</h2>
+      <p class="a p">倍周期级联有个惊人的几何事实：<strong>把分岔图在 <em>r</em> = <em>r</em>∞ 附近放大，再放大，形状还是那个形状</strong>——原来的一棵树在里面套着一棵小树。这就是自相似。</p>
+      <p class="a p">重整化（renormalization）把这个事实变成方程。做法是「两步并一步」：走两次抛物线 <em>f</em>，得到 <em>f</em>²；再把它沿 <em>x</em> 方向放大 α 倍、<em>r</em> 方向调到分岔点上，得到的新函数 <strong>应当和原来的 <em>f</em> 长得一样</strong>。于是有函数方程：</p>
+      <span class="formula">g(x) = −α g( g(−x/α) )</span>
+      <p class="a p">满足它的函数 <em>g</em> 叫<strong>普适函数</strong>，它不是抛物线，但所有单峰二次映射在临界点附近都「长成 <em>g</em> 的样子」。<strong>方程的解就是这个函数 <em>g</em>，而 α = 2.5029 是与它配对的标度常数</strong>；δ = 4.6692 则是「偏离 <em>g</em> 的方向被缩小的速率」——粗略说，δ 是重整化算子在不动点处的一个特征值。</p>
+      <div class="a card" style="margin-top:14px;border-color:rgba(98,208,255,.3)">
+        <h4 style="color:#bfe6ff">为什么这就解释了「无关函数形状」</h4>
+        <p>重整化一次又一次地作用，把函数往 <em>g</em> 上拉。<strong>拉过去之后，原来长什么样已经被「洗掉」了</strong>。所以只要属于同一个吸引域（同样单峰、同样二次），最终都收敛到同一个 <em>g</em>、同一对 δ 与 α。这和相空间里「所有轨道都落到同一个吸引子上」是同一件事，只不过这里的「点」是整个函数。</p>
+      </div>
+      <p class="a p" style="margin-top:12px;color:var(--mut);font-size:13.6px">本节只讲思路。解那个函数方程需要数值方法（在原书 §10.7 有展开），本章不做——这里要你记住的是这条逻辑链：<strong>自相似 → 重整化方程 → 不动点 → 普适常数</strong>。</p>
+    </div>
+    <div class="pfoot">§10.7 重整化</div>
+  </section>
+
+  <!-- ========== 21 反例与边界 ========== -->
+  <section class="page" data-title="五个容易踩的坑">
+    <div class="page-inner">
+      <div class="a kicker">PITFALLS · 反例与边界</div>
+      <h2 class="a">五个容易踩的坑</h2>
+      <div class="split" style="margin-top:14px;gap:14px">
+        <div>
+          <div class="a card" style="margin-bottom:10px;border-color:rgba(217,83,74,.34)">
+            <h4 style="color:#ffb4a6">1　把「一维」当成「简单」</h4>
+            <p>一维映射没有相图、没有体积、只有一个递推式，却照样混沌。复杂度不来自维数，而来自<strong>拉伸与折叠</strong>。</p>
+          </div>
+          <div class="a card" style="margin-bottom:10px">
+            <h4>2　在窗口里以为没有混沌</h4>
+            <p>混沌区是一把筛子，周期窗口密布。看到周期 3 不等于系统「不是混沌系统」，只说明参数落进了窗口（r = 3.83 处 λ = −0.370）。</p>
+          </div>
+          <div class="a card">
+            <h4>3　忘记 r ≤ 4 这个前提</h4>
+            <p>只有 0 ≤ r ≤ 4 时抛物线才把 [0,1] 映到自身。r &gt; 4 时这个性质就没了：轨道一旦跑出区间就再也回不来，之后反复乘一个大于 1 的因子，最终发散到 −∞。本章所有结论都不适用。</p>
+          </div>
+        </div>
+        <div>
+          <div class="a card" style="margin-bottom:10px">
+            <h4>4　拿瞬时增长率冒充 λ</h4>
+            <p>λ 是<strong>长期平均</strong>。暂态不够长、平均步数不够多，窗口附近的 λ 符号会乱跳。本章的取法是 1500 步暂态 + 900 步平均。</p>
+          </div>
+          <div class="a card" style="margin-bottom:10px;border-color:rgba(232,176,75,.36)">
+            <h4 style="color:#f3d79a">5　把 δ 当成「所有混沌系统的常数」</h4>
+            <p>δ = 4.669 只属于<strong>倍周期通向混沌</strong>这一条路、且属于单峰二次的普适类。别的通向混沌的路径（准周期破裂、阵发性）有各自不同的常数。</p>
+          </div>
+          <div class="a card">
+            <h4>一句话总结边界</h4>
+            <p>本章所有结论都挂在「一维、单峰、0 ≤ r ≤ 4」这三个条件上。第 11–12 章要处理的是：不满足这些条件时，还能说什么。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§10.1–§10.7 回顾</div>
+  </section>
+
+  <!-- ========== 22 自测 ========== -->
+  <section class="page" data-title="自测">
+    <div class="page-inner">
+      <div class="a kicker">CHECK · 自测</div>
+      <h2 class="a" style="margin-bottom:14px">五道题</h2>
+      <div class="qs" id="quizbox"></div>
+      <div class="score" id="score"></div>
+      <label class="a done" id="donebox">
+        <input type="checkbox" id="doneChk">
+        <span>这一章读完了</span>
+      </label>
+    </div>
+    <div class="pfoot">—</div>
+  </section>
+
+  <!-- ========== 23 带走 ========== -->
+  <section class="page" data-title="带走三句话">
+    <div class="page-inner">
+      <div class="a kicker">TAKE AWAY · 三句话</div>
+      <h2 class="a">带走三句话</h2>
+      <div class="split" style="margin-top:18px">
+        <div>
+          <p class="a p"><strong>一、一维就有混沌。</strong>x<sub>n+1</sub> = r x<sub>n</sub>(1−x<sub>n</sub>) 只有一个变量、一个参数，却包含不动点、周期、倍周期、混沌与周期窗口。判据是 <em>f</em>′ 与 λ，不是眼睛。</p>
+          <p class="a p"><strong>二、级联有节奏，节奏是普适的。</strong>分岔点按 δ = 4.669 收敛，几何按 α = 2.503 缩水。本章数值：δ = 4.681→4.663→4.668→4.669，α = 2.655→…→2.5030。<strong>换任何单峰二次映射，还是这两个数。</strong></p>
+          <p class="a p"><strong>三、chaos 与「随机」不是一回事。</strong>r = 4 时有精确的不变密度 1/(π√(x(1−x)))、精确的 λ = ln 2；这些都是确定性的结果。混沌有自己的秩序，只是那个秩序是<strong>统计的、分形的</strong>。</p>
+        </div>
+        <div class="a card" style="border-color:rgba(232,176,75,.36)">
+          <h4>回到本章开头的问题</h4>
+          <p style="line-height:1.95">一条抛物线凭什么演出混沌？</p>
+          <p style="line-height:1.95">因为它同时做两件事：<strong>拉伸</strong>（把靠近的点分开，斜率 2–4）与<strong>折叠</strong>（把区间折回自己身上）。分开让你失去记忆，折回让你永远跑不掉。</p>
+          <p style="line-height:1.95;color:#a9d9cf">下一章换个问题：这种「永远跑不掉、却又无限细分」的集合，到底有多「大」？答案是——它的维数不是整数。</p>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">—</div>
+  </section>
+
+
+</main>
+
+<script>
+(function(){
+"use strict";
+var $=function(s,r){return (r||document).querySelector(s);};
+var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s));};
+var REDUCE=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+var C={text:"#8b95a4",gold:"#e8b04b",cyan:"#62d0ff",warm:"#ff9770",teal:"#4fbfa8",grid:"rgba(255,255,255,.06)"};
+
+/* ================= 翻页 ================= */
+var pages=$$(".page"), dotsBox=$("#dots"), rail=$("#rail"),
+    counter=$("#counter"), whereEl=$("#where"), tip=$("#tip");
+var idx=0, steps=[], lock=false;
+
+pages.forEach(function(p,i){
+  steps[i]=0;
+  var b=document.createElement("button");
+  b.setAttribute("aria-label","第 "+(i+1)+" 页");
+  b.innerHTML='<i></i>';
+  b.addEventListener("click",function(){ go(i); });
+  dotsBox.appendChild(b);
+});
+var dotEls=$$("#dots button");
+
+function setStep(pi,s){
+  steps[pi]=s;
+  var page=pages[pi];
+  $$(".step",page).forEach(function(el,k){ el.classList.toggle("on",k===s); });
+  $$(".sdots i",page).forEach(function(el,k){ el.classList.toggle("on",k===s); });
+  var hook=page.getAttribute("data-hook");
+  if(hook==="flow"&&window.NDC1) window.NDC1.pick(s);
+  if(hook==="pend"&&window.NDC2) window.NDC2.setGamma([0,0.22,0.75][s]);
+  if(hook==="lorenz"&&window.NDC4) window.NDC4.setDelta([1e-2,1e-5,1e-9][s]);
+}
+function paint(){
+  for(var i=0;i<pages.length;i++) pages[i].classList.toggle("on",i===idx);
+  for(var k=0;k<dotEls.length;k++) dotEls[k].classList.toggle("on",k===idx);
+  rail.style.width=(((idx+1)/pages.length)*100).toFixed(2)+"%";
+  counter.innerHTML="<b>"+String(idx+1).padStart(2,"0")+"</b> / "+pages.length;
+  whereEl.innerHTML="<b>"+(pages[idx].getAttribute("data-title")||"")+"</b>";
+}
+function go(i){
+  if(i<0||i>=pages.length) return;
+  idx=i;
+  var inner=$(".page-inner",pages[idx]);
+  if(inner) inner.scrollTop=0;
+  if(window.__FITS) window.__FITS.forEach(function(fn){ try{ fn(); }catch(e){} });
+  paint();
+  setStep(idx,0);
+  if(idx>0) tip.classList.add("hide");
+}
+function next(){
+  var p=pages[idx], n=parseInt(p.getAttribute("data-steps")||"0",10), s=steps[idx]||0;
+  if(n>0&&s<n-1){ setStep(idx,s+1); return; }
+  if(idx<pages.length-1) go(idx+1);
+}
+function prev(){
+  var p=pages[idx], n=parseInt(p.getAttribute("data-steps")||"0",10), s=steps[idx]||0;
+  if(n>0&&s>0){ setStep(idx,s-1); return; }
+  if(idx>0) go(idx-1);
+}
+function innerEdge(dir){
+  var inner=pages[idx]&&$(".page-inner",pages[idx]);
+  if(!inner||inner.scrollHeight<=inner.clientHeight+4) return true;
+  if(dir>0) return inner.scrollTop+inner.clientHeight>=inner.scrollHeight-6;
+  return inner.scrollTop<=3;
+}
+paint(); setStep(0,0);
+
+window.addEventListener("wheel",function(e){
+  if(lock) return;
+  if(Math.abs(e.deltaY)<8) return;
+  var dir=e.deltaY>0?1:-1;
+  if(!innerEdge(dir)) return;
+  lock=true;
+  if(dir>0) next(); else prev();
+  window.setTimeout(function(){ lock=false; }, 620);
+},{passive:true});
+
+window.addEventListener("keydown",function(e){
+  var k=e.key;
+  if(k==="ArrowDown"||k==="ArrowRight"||k===" "||k==="PageDown"||k==="Enter"){ e.preventDefault(); next(); }
+  else if(k==="ArrowUp"||k==="ArrowLeft"||k==="PageUp"){ e.preventDefault(); prev(); }
+  else if(k==="Home"){ e.preventDefault(); go(0); }
+  else if(k==="End"){ e.preventDefault(); go(pages.length-1); }
+});
+
+var ty=null;
+window.addEventListener("touchstart",function(e){ ty=e.touches[0].clientY; },{passive:true});
+window.addEventListener("touchend",function(e){
+  if(ty===null) return;
+  var dy=ty-e.changedTouches[0].clientY;
+  if(Math.abs(dy)>46){ dy>0?next():prev(); }
+  ty=null;
+},{passive:true});
+
+/* ================= 画布工具 ================= */
+function makeCanvas(cv){
+  var ctx=cv.getContext("2d");
+  var dpr=Math.min(window.devicePixelRatio||1,2);
+  var h0=parseInt(cv.getAttribute("height"),10)||330;
+  var w=cv.clientWidth||600, h=h0;
+  function fit(){
+    w=cv.clientWidth||600;
+    cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
+    cv.style.height=h+"px";
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  fit(); window.addEventListener("resize",fit);
+  window.__FITS=window.__FITS||[]; window.__FITS.push(fit);
+  return {ctx:ctx,fit:fit,w:function(){return w;},h:function(){return h;}};
+}
+function loop(cv,fn){
+  function tick(){
+    try{
+      var pg=cv.closest(".page");
+      if(!pg||pg.classList.contains("on")) fn();
+    }catch(e){ /* 单帧出错不中断动画循环 */ }
+    window.requestAnimationFrame(tick);
+  }
+  window.requestAnimationFrame(tick);
+}
+function tip(ctx,txt,x,y,color,size,align){
+  ctx.fillStyle=color||C.text;
+  ctx.font=(size||11)+'px "PingFang SC","Microsoft YaHei",sans-serif';
+  ctx.textAlign=align||"left";
+  ctx.fillText(txt,x,y);
+}
+
+
+/* ================= 演示 01 · 分岔图（可缩放） ================= */
+(function(){
+  var cv=$("#cv1"); if(!cv) return;
+  var U=makeCanvas(cv), ctx=U.ctx;
+  var center=3.25, half=0.75, cache=null, cacheKey="";
+
+  function build(w,h){
+    var key=w+"x"+h+"@"+center.toFixed(4)+"@"+half.toFixed(4);
+    if(key===cacheKey&&cache) return;
+    var off=document.createElement("canvas");
+    off.width=Math.max(1,Math.round(w)); off.height=Math.max(1,Math.round(h));
+    var oc=off.getContext("2d");
+    oc.fillStyle="#05070b"; oc.fillRect(0,0,off.width,off.height);
+    var rlo=center-half, rhi=center+half, cols=Math.max(120,Math.round(w));
+    var i, k, x;
+    for(i=0;i<cols;i++){
+      var r=rlo+(rhi-rlo)*i/(cols-1);
+      x=0.37;
+      for(k=0;k<300;k++) x=r*x*(1-x);
+      for(k=0;k<170;k++){
+        x=r*x*(1-x);
+        var py=Math.round((1-x)*(off.height-24))+8;
+        oc.fillStyle="rgba(98,208,255,.55)";
+        oc.fillRect(i,py,1,1);
+      }
+    }
+    cache=off; cacheKey=key;
+  }
+
+  function draw(){
+    var w=U.w(), h=U.h();
+    ctx.clearRect(0,0,w,h);
+    build(w,h);
+    ctx.drawImage(cache,0,0);
+    ctx.strokeStyle="rgba(255,255,255,.26)"; ctx.lineWidth=1.1;
+    ctx.beginPath(); ctx.moveTo(0,h-16); ctx.lineTo(w,h-16); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,8); ctx.lineTo(0,h-16); ctx.stroke();
+    tip(ctx,"r",w-8,h-6,C.text,10.5,"right");
+    tip(ctx,"x",6,h-24,C.text,10.5,"left");
+    tip(ctx,rlo().toFixed(4),4,h-4,C.text,9.5,"left");
+    tip(ctx,rhi().toFixed(4),w-4,h-4,C.text,9.5,"right");
+    tip(ctx,"1",4,16,C.text,9.5,"left");
+    tip(ctx,"0",4,h-22,C.text,9.5,"left");
+  }
+  function rlo(){ return Math.max(0,center-half); }
+  function rhi(){ return Math.min(4,center+half); }
+
+  loop(cv,draw);
+
+  function setWin(c,hd){
+    center=c; half=hd; cacheKey="";
+    var sl=$("#p1"), sv=$("#p1v");
+    if(sl) sl.value=c; if(sv) sv.textContent=c.toFixed(3);
+    var ro=$("#ro1");
+    if(ro) ro.innerHTML="窗口 r ∈ [<b>"+rlo().toFixed(4)+"</b>, <b>"+rhi().toFixed(4)+
+      "</b>]　宽度 <b>"+(2*hd).toFixed(4)+"</b>　每列扫 "+Math.round(U.w())+" 个 r 值";
+  }
+  var sl1=$("#p1"), sv1=$("#p1v");
+  if(sl1) sl1.addEventListener("input",function(){
+    center=parseFloat(sl1.value); cacheKey="";
+    if(sv1) sv1.textContent=center.toFixed(3);
+    var ro=$("#ro1");
+    if(ro) ro.innerHTML="窗口 r ∈ [<b>"+rlo().toFixed(4)+"</b>, <b>"+rhi().toFixed(4)+"</b>]　宽度 <b>"+(2*half).toFixed(4)+"</b>";
+  });
+  var rb1=$("#reset1");
+  if(rb1) rb1.addEventListener("click",function(){ setWin(3.25,0.75); });
+
+  window.NDC_BIFUR={set:function(v){
+    if(v===1) setWin(3.25,0.75);
+    else if(v===2) setWin(3.50,0.10);
+    else setWin(3.84,0.02);
+  }};
+})();
+
+/* ================= 演示 02 · 蛛网图（一步一算） ================= */
+(function(){
+  var cv=$("#cv2"); if(!cv) return;
+  var U=makeCanvas(cv), ctx=U.ctx;
+  var r=2.8, x=0.12, steps=0, held=0;
+
+  function f(q){ return r*q*(1-q); }
+  function box(w,h){ var s=Math.min(w-72,h-70); return {x0:(w-s)/2, y0:h-24, s:s}; }
+
+  function draw(){
+    var w=U.w(), h=U.h(), B=box(w,h), s=B.s, i;
+    ctx.clearRect(0,0,w,h);
+    ctx.strokeStyle=C.grid; ctx.lineWidth=1;
+    for(i=1;i<4;i++){
+      var g=B.x0+s*i/4;
+      ctx.beginPath(); ctx.moveTo(g,B.y0); ctx.lineTo(g,B.y0-s); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(B.x0,B.y0-s*i/4); ctx.lineTo(B.x0+s,B.y0-s*i/4); ctx.stroke();
+    }
+    ctx.strokeStyle="rgba(255,255,255,.26)"; ctx.lineWidth=1.1;
+    ctx.beginPath(); ctx.moveTo(B.x0,B.y0); ctx.lineTo(B.x0+s,B.y0); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(B.x0,B.y0); ctx.lineTo(B.x0,B.y0-s); ctx.stroke();
+    tip(ctx,"x_n",B.x0+s-2,B.y0+14,C.text,10,"right");
+    tip(ctx,"x_n+1",B.x0-8,B.y0-s+8,C.text,10,"right");
+
+    ctx.strokeStyle="rgba(139,149,164,.55)"; ctx.setLineDash([4,4]);
+    ctx.beginPath(); ctx.moveTo(B.x0,B.y0); ctx.lineTo(B.x0+s,B.y0-s); ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.beginPath();
+    for(i=0;i<=100;i++){
+      var q=i/100.0, px=B.x0+q*s, py=B.y0-f(q)*s;
+      if(i) ctx.lineTo(px,py); else ctx.moveTo(px,py);
+    }
+    ctx.strokeStyle=C.cyan; ctx.lineWidth=1.8; ctx.stroke();
+
+    /* 阶梯：从 x₀ 开始，画出全部已走过的步 */
+    var q2=CW0, path = [];
+    for(i=0;i<steps;i++){
+      var y2=f(q2);
+      path.push([q2,q2]); path.push([q2,y2]);
+      q2=y2;
+    }
+    if(path.length>1){
+      ctx.beginPath();
+      for(i=0;i<path.length;i++){
+        var X2=B.x0+path[i][0]*s, Y2=B.y0-path[i][1]*s;
+        if(i) ctx.lineTo(X2,Y2); else ctx.moveTo(X2,Y2);
+      }
+      ctx.strokeStyle="rgba(232,176,75,.85)"; ctx.lineWidth=1.2; ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(B.x0+q2*s,B.y0-q2*s,3.4,0,Math.PI*2);
+      ctx.fillStyle=C.gold; ctx.fill();
+    }
+    tip(ctx,"r = "+r.toFixed(2)+"　x = "+q2.toFixed(4)+"　步数 "+steps,B.x0,B.y0-s-10,C.gold,10.5,"left");
+  }
+
+  var CW0=0.12;
+  loop(cv,function(){
+    held++;
+    if(held>=8){ held=0; if(steps<200) steps++; }
+    draw();
+    var ro=$("#ro2");
+    if(ro){
+      var xc=CW0; for(var i=0;i<steps;i++) xc=f(xc);
+      var per = (r>3.999)? "—" : (r<1? "→ 0" : (r<3? "→ 不动点 1−1/r" : ""));
+      ro.innerHTML="r = <b>"+r.toFixed(2)+"</b>　已走 <b>"+steps+"</b> 步　x = <b>"+xc.toFixed(4)+
+        "</b>　"+per;
+    }
+  });
+
+  function restart(v){
+    if(v!==undefined) r=v;
+    CW0=0.12; steps=0; held=0;
+    var sl=$("#p2"), sv=$("#p2v");
+    if(sl) sl.value=r; if(sv) sv.textContent=r.toFixed(2);
+  }
+  var sl2=$("#p2"), sv2=$("#p2v");
+  if(sl2) sl2.addEventListener("input",function(){ restart(parseFloat(sl2.value)); });
+  var rb2=$("#reset2");
+  if(rb2) rb2.addEventListener("click",function(){ restart(); });
+
+  function pick(ev){
+    var w=U.w(), h=U.h(), B=box(w,h);
+    var q=(ev.offsetX-B.x0)/B.s;
+    if(q<0||q>1) return;
+    CW0=q; steps=0;
+  }
+  cv.addEventListener("pointerdown",function(e){ cv.setPointerCapture(e.pointerId); pick(e); });
+
+  window.NDC_COBWEB={set:function(v){ restart(v); }};
+})();
+
+/* ================= 三拍与外壳的同步 ================= */
+(function(){
+  var MAP={bifur:"NDC_BIFUR", cobweb:"NDC_COBWEB"};
+  var BEATS={bifur:[1,2,3], cobweb:[2.8,3.5,3.95]};
+  function stepOf(pg){
+    var ss=$$(".step",pg), k=0, i;
+    for(i=0;i<ss.length;i++){ if(ss[i].classList.contains("on")) k=i; }
+    return k;
+  }
+  var lastKey="";
+  function sync(){
+    var pg=$(".page.on"); if(!pg) return;
+    var hook=pg.getAttribute("data-hook"); if(!hook) return;
+    var api=window[MAP[hook]]; if(!api) return;
+    var k=stepOf(pg), key=hook+"#"+k;
+    if(key===lastKey) return;
+    lastKey=key;
+    var bs=BEATS[hook];
+    if(bs) api.set(bs[k<bs.length?k:bs.length-1]);
+  }
+  var deck=$("#deck"); if(!deck) return;
+  if(window.MutationObserver){
+    var mo=new MutationObserver(sync);
+    mo.observe(deck,{attributes:true,attributeFilter:["class"],subtree:true});
+  } else {
+    window.setInterval(sync,320);
+  }
+  window.setTimeout(sync,80);
+})();
+
+
+
+/* ================= 小测 ================= */
+(function(){
+  var box=$("#quizbox"); if(!box) return;
+  var QS=[
+    {q:"一维映射 x_{n+1} = f(x_n) 的不动点稳定判据是？",
+     o:["f′(x*) < 0","|f′(x*)| < 1","f″(x*) < 0","f(x*) = 0"],a:1,
+     w:"误差每步乘 f′，所以 |f′| < 1 才衰减。f′ 的符号只决定「直接逼近」还是「左右横跳着逼近」。"},
+    {q:"逻辑斯谛映射里 r 从 3 加到 1+√6 ≈ 3.4495，发生了什么？",
+     o:["不动点失稳，轨道变成周期 2，再在 1+√6 处翻成周期 4","轨道从混沌回到不动点","周期 2 一直稳定到 r = 4","系统发散了"],a:1,
+     w:"r = 3 处 f′(1−1/r) = −1，出现周期 2；2 周期的乘子 μ = −r²+2r+4 在 r = 1+√6 处等于 −1，于是翻成周期 4。"},
+    {q:"在 r = 3.83 附近测到干净的周期 3，这说明了什么？",
+     o:["这个系统不是混沌的","参数落进了周期窗口（r = 1+√8 ≈ 3.8284 起），混沌区里密布这样的窗口","周期 3 意味着系统可积","数值算错了"],a:1,
+     w:"混沌参数区是一把筛子。窗口的机制是周期 3 的鞍结分岔（乘子 = +1，λ = 0），窗口内部还会再套一个小级联。"},
+    {q:"Feigenbaum 常数 δ = 4.669 的「普适」指的是？",
+     o:["所有混沌系统都有这个常数","任何单峰二次映射的倍周期级联，其分岔点间距比都趋于同一个 δ","只有逻辑斯谛映射才有","δ 随参数 r 变化"],a:1,
+     w:"普适性只属于「单峰、二次」这个普适类。多峰或不光滑的映射（如帐篷映射）δ 与 α 都会变。"},
+    {q:"为什么 λ(r = 4) 正好等于 ln 2？",
+     o:["巧合","因为 x = sin²(πθ/2) 把抛物线共轭成帐篷映射，而帐篷每步放大 2 倍","因为 r = 4 时 f′ = 2 处处成立","因为不变密度是均匀的"],a:1,
+     w:"共轭变换把 4x(1−x) 变成 2θ (mod 1)，|T′| = 2 处处成立，所以 λ = ln 2。本章数值 0.693144 与 ln2 相差 3×10⁻⁶。"}
+  
+  ];
+  var KEY="ndc10-quiz", DKEY="ndc10-done";
+  var saved={}, score=0, answered=0;
+  try{ saved=JSON.parse(localStorage.getItem(KEY)||"{}"); }catch(e){ saved={}; }
+
+  QS.forEach(function(item,qi){
+    var w=document.createElement("div"); w.className="q";
+    var stem=document.createElement("div"); stem.className="stem"; stem.textContent="Q"+(qi+1)+"　"+item.q;
+    var opts=document.createElement("div");
+    var fb=document.createElement("div"); fb.className="fb";
+    w.appendChild(stem); w.appendChild(opts); w.appendChild(fb);
+    item.o.forEach(function(txt,oi){
+      var d=document.createElement("div"); d.className="opt";
+      var k=document.createElement("span"); k.className="k"; k.textContent=String.fromCharCode(65+oi);
+      var s=document.createElement("span"); s.textContent=txt;
+      d.appendChild(k); d.appendChild(s);
+      d.addEventListener("click",function(){
+        if(opts.getAttribute("data-locked")==="1") return;
+        opts.setAttribute("data-locked","1");
+        var ok=oi===item.a;
+        Array.prototype.forEach.call(opts.children,function(c,ci){
+          c.classList.add("locked");
+          if(ci===item.a) c.classList.add("right");
+        });
+        if(!ok) d.classList.add("wrong");
+        fb.textContent=(ok?"答对了。":"再看一眼。")+item.w;
+        fb.className="fb show"+(ok?"":" bad");
+        answered++; if(ok) score++;
+        saved[qi]=oi;
+        try{ localStorage.setItem(KEY,JSON.stringify(saved)); }catch(e){}
+        paintScore();
+      });
+      opts.appendChild(d);
+    });
+    if(saved[qi]!==undefined){
+      var oi2=saved[qi];
+      opts.setAttribute("data-locked","1");
+      Array.prototype.forEach.call(opts.children,function(c,ci){
+        c.classList.add("locked");
+        if(ci===item.a) c.classList.add("right");
+      });
+      if(oi2!==item.a) opts.children[oi2].classList.add("wrong");
+      fb.textContent=(oi2===item.a?"答对了。":"再看一眼。")+item.w;
+      fb.className="fb show"+(oi2===item.a?"":" bad");
+    }
+    box.appendChild(w);
+  });
+  function paintScore(){
+    var el=$("#score"); if(!el) return;
+    if(!answered){ el.innerHTML="共 5 题 · 点选项立刻判对错"; return; }
+    el.innerHTML="已作答 <b>"+answered+"</b> / 5　答对 <b>"+score+"</b> 题　"+
+      (score===5?"全对，这一章过关了。":score>=3?"基本到位，错的那几道回看解析。":"建议回去把演示再做一遍。");
+  }
+  paintScore();
+  var chk=$("#doneChk"), boxD=$("#donebox");
+  try{ chk.checked=localStorage.getItem(DKEY)==="1"; }catch(e){}
+  if(chk) chk.addEventListener("change",function(){
+    try{ localStorage.setItem(DKEY,chk.checked?"1":"0"); }catch(e){}
+    if(boxD) boxD.style.background=chk.checked?"rgba(79,191,168,.16)":"";
+  });
+})();
+
+/* 四个演示都就绪后，把当前页（含步骤）对齐一次，保证首屏与第 1 步一致 */
+setStep(idx,steps[idx]||0);
+})();
+</script>
+
+</body>
+</html>

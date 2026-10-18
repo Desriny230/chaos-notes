@@ -1,0 +1,1340 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>第 1 章 · 概述 —— 非线性动力学与混沌</title>
+<style>
+/* ================= 0. 基础 ================= */
+:root{
+  --bg:#080b10; --bg2:#0e141d; --panel:#101822; --panel2:#0b1119;
+  --ink:#eee8dc; --ink2:#c3cad6; --mut:#8b95a4; --dim:#5c6775;
+  --gold:#e8b04b; --cyan:#62d0ff; --warm:#ff9770; --teal:#4fbfa8; --red:#d9534a;
+  --line:rgba(255,255,255,.10); --line2:rgba(255,255,255,.06);
+  --serif:"Source Han Serif SC","Noto Serif SC","Songti SC",SimSun,"STSong",serif;
+  --sans:"PingFang SC","HarmonyOS Sans SC","Microsoft YaHei","Hiragino Sans GB",system-ui,sans-serif;
+  --mono:"JetBrains Mono","Cascadia Code",Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--sans);
+  font-size:16px; line-height:1.85; overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4{font-family:var(--serif);font-weight:700;line-height:1.28;letter-spacing:.01em}
+em{font-style:normal;color:var(--gold)}
+::selection{background:rgba(232,176,75,.28)}
+
+/* ================= 1. 背景（全篇同一底色，只有缓慢呼吸的光） ================= */
+.bg{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.bg .orb{position:absolute;border-radius:50%;filter:blur(90px);opacity:.30;mix-blend-mode:screen}
+.bg .o1{width:52vw;height:52vw;left:-12vw;top:-14vw;
+  background:radial-gradient(circle,rgba(43,76,126,.9),transparent 66%);
+  animation:drift1 34s ease-in-out infinite alternate}
+.bg .o2{width:44vw;height:44vw;right:-10vw;bottom:-14vw;
+  background:radial-gradient(circle,rgba(150,62,44,.75),transparent 66%);
+  animation:drift2 42s ease-in-out infinite alternate}
+.bg .o3{width:30vw;height:30vw;left:44vw;top:38vh;opacity:.13;
+  background:radial-gradient(circle,rgba(232,176,75,.8),transparent 68%);
+  animation:drift1 28s ease-in-out infinite alternate-reverse}
+@keyframes drift1{from{transform:translate3d(0,0,0) scale(1)}to{transform:translate3d(4vw,3vh,0) scale(1.12)}}
+@keyframes drift2{from{transform:translate3d(0,0,0) scale(1.06)}to{transform:translate3d(-3vw,-4vh,0) scale(.96)}}
+.bg .mesh{position:absolute;inset:-10%;
+  background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);
+  background-size:72px 72px;
+  -webkit-mask-image:radial-gradient(62% 58% at 50% 45%,#000 20%,transparent 80%);
+  mask-image:radial-gradient(62% 58% at 50% 45%,#000 20%,transparent 80%);
+  animation:meshmove 60s linear infinite}
+@keyframes meshmove{to{transform:translate3d(-72px,-72px,0)}}
+
+/* ================= 2. 幻灯片容器 ================= */
+.deck{position:fixed;inset:0;z-index:2}
+.page{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  padding:clamp(24px,5vh,64px) clamp(20px,4vw,56px);
+  opacity:0;visibility:hidden;pointer-events:none;
+  transform:scale(1.015);filter:blur(7px);
+  transition:opacity .62s cubic-bezier(.4,0,.2,1),transform .72s cubic-bezier(.4,0,.2,1),
+             filter .62s cubic-bezier(.4,0,.2,1),visibility .62s;
+}
+.page.on{opacity:1;visibility:visible;transform:none;filter:none;pointer-events:auto;z-index:3}
+.page-inner{width:min(1140px,100%);max-height:100%;overflow:auto;overscroll-behavior:contain;
+  scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent}
+.page-inner::-webkit-scrollbar{width:6px}
+.page-inner::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:6px}
+
+/* 入场：逐级浮现（不是从下往上滑，而是轻微上浮+淡入） */
+.a{opacity:0;transform:translateY(16px);
+  transition:opacity .68s cubic-bezier(.2,.8,.3,1),transform .68s cubic-bezier(.2,.8,.3,1)}
+.page.on .a{opacity:1;transform:none}
+.page.on .a:nth-child(1){transition-delay:.05s}
+.page.on .a:nth-child(2){transition-delay:.11s}
+.page.on .a:nth-child(3){transition-delay:.17s}
+.page.on .a:nth-child(4){transition-delay:.23s}
+.page.on .a:nth-child(5){transition-delay:.29s}
+.page.on .a:nth-child(6){transition-delay:.35s}
+.page.on .a:nth-child(7){transition-delay:.41s}
+.page.on .a:nth-child(8){transition-delay:.47s}
+
+/* ================= 3. HUD ================= */
+.rail{position:fixed;top:0;left:0;height:2px;z-index:60;background:linear-gradient(90deg,var(--gold),var(--warm));
+  box-shadow:0 0 14px rgba(232,176,75,.55);transition:width .55s cubic-bezier(.4,0,.2,1)}
+.dots{position:fixed;right:clamp(12px,2vw,26px);top:50%;transform:translateY(-50%);z-index:60;
+  display:flex;flex-direction:column;gap:7px;align-items:flex-end}
+.dots button{appearance:none;border:0;background:transparent;padding:3px;cursor:pointer;display:flex;align-items:center;gap:8px}
+.dots i{display:block;width:14px;height:2px;background:rgba(255,255,255,.20);transition:.3s;border-radius:2px}
+.dots button:hover i{background:rgba(255,255,255,.45);width:20px}
+.dots button.on i{background:var(--gold);width:26px}
+.counter{position:fixed;right:clamp(12px,2vw,26px);bottom:18px;z-index:60;
+  font:600 11.5px/1 var(--mono);letter-spacing:.18em;color:var(--dim)}
+.counter b{color:var(--gold)}
+.where{position:fixed;left:clamp(14px,2.4vw,30px);bottom:18px;z-index:60;
+  font:500 11.5px/1.6 var(--sans);letter-spacing:.14em;color:var(--dim);
+  max-width:44vw;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.where b{color:var(--mut);font-weight:500}
+.tip{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:60;
+  font:500 11.5px/1 var(--sans);letter-spacing:.2em;color:var(--dim);
+  display:flex;align-items:center;gap:9px;transition:opacity .5s}
+.tip i{width:5px;height:5px;border-radius:50%;background:var(--gold);animation:blip 1.7s infinite}
+@keyframes blip{0%,100%{opacity:.25}50%{opacity:1}}
+.tip.hide{opacity:0;pointer-events:none}
+
+/* ================= 4. 版式组件 ================= */
+.kicker{font:600 10.5px/1 var(--sans);letter-spacing:.3em;color:var(--gold);
+  display:flex;align-items:center;gap:12px;margin-bottom:20px;text-transform:uppercase}
+.kicker::before{content:"";width:34px;height:1px;background:linear-gradient(90deg,var(--gold),transparent)}
+h2{font-size:clamp(24px,3.4vw,40px);color:#f4eee2;margin-bottom:18px;text-wrap:balance}
+.p{font-size:clamp(14.6px,1.15vw,16.4px);line-height:1.95;color:var(--ink2);margin-bottom:.95em}
+.p strong{color:#f6f1e5;font-weight:600;background:linear-gradient(transparent 64%,rgba(232,176,75,.30) 0);padding:0 1px}
+.p b{color:#f6f1e5}
+.pull{border-left:2px solid var(--gold);padding-left:18px;margin:22px 0;
+  font-family:var(--serif);font-size:clamp(15px,1.5vw,19px);line-height:1.8;color:#efe6d2}
+.pull cite{display:block;font-family:var(--sans);font-size:11.5px;color:var(--dim);font-style:normal;margin-top:8px;letter-spacing:.08em}
+.split{display:grid;grid-template-columns:1.06fr .94fr;gap:clamp(22px,4vw,60px);align-items:center}
+.split.rev{grid-template-columns:.94fr 1.06fr}
+.center{text-align:center}
+.fig{background:rgba(255,255,255,.028);border:1px solid var(--line2);border-radius:18px;padding:16px}
+.fig svg{display:block;width:100%;height:auto}
+.figcap{margin-top:10px;font-size:12px;line-height:1.7;color:var(--dim)}
+.card{background:rgba(255,255,255,.032);border:1px solid var(--line2);border-radius:16px;padding:20px 22px}
+.card h4{font-size:15.5px;color:#f2ecdf;margin-bottom:9px}
+.card p{font-size:13.6px;line-height:1.85;color:var(--mut)}
+.chips{display:flex;flex-wrap:wrap;gap:9px;margin-top:22px}
+.chips span{font-size:11.5px;letter-spacing:.08em;color:var(--mut);
+  border:1px solid var(--line);padding:6px 12px;border-radius:999px}
+
+/* 演示台 */
+.demo{background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.015));
+  border:1px solid var(--line);border-radius:18px;padding:14px;position:relative}
+.demo::before{content:"可玩";position:absolute;top:-9px;left:18px;font:600 9.5px/1 var(--sans);
+  letter-spacing:.24em;color:#0a0d12;background:var(--gold);padding:4px 8px;border-radius:4px}
+.demo canvas{display:block;width:100%;border-radius:12px;background:#05070b;touch-action:none;cursor:crosshair}
+.ctrls{display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin-top:12px}
+.chip{appearance:none;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.03);
+  color:#c3cbd8;font:500 11.5px/1 var(--mono);padding:7px 11px;border-radius:999px;cursor:pointer;transition:.18s}
+.chip:hover{background:rgba(255,255,255,.09);color:#fff}
+.chip.on{background:var(--gold);color:#0a0d12;border-color:var(--gold);font-weight:700}
+.btn{appearance:none;border:1px solid rgba(255,255,255,.18);background:transparent;color:#dfe6ef;
+  font:500 11.5px/1 var(--sans);padding:8px 13px;border-radius:8px;cursor:pointer;letter-spacing:.05em}
+.btn:hover{background:rgba(255,255,255,.08)}
+.slider{display:flex;align-items:center;gap:9px;font:500 11.5px/1 var(--mono);color:var(--mut)}
+.slider input[type=range]{appearance:none;width:clamp(100px,16vw,170px);height:3px;border-radius:3px;
+  background:rgba(255,255,255,.18);outline:none}
+.slider input[type=range]::-webkit-slider-thumb{appearance:none;width:12px;height:12px;border-radius:50%;
+  background:var(--gold);cursor:pointer;box-shadow:0 0 0 3px rgba(232,176,75,.2)}
+.slider b{color:var(--gold);font-weight:600;min-width:3.2em;display:inline-block}
+.readout{font:500 11.5px/1.7 var(--mono);color:var(--dim);margin-top:9px}
+.readout b{color:var(--teal);font-weight:600}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:9px;font:500 11px/1 var(--sans);color:var(--dim)}
+.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+
+/* 步骤文字（演示页右侧） */
+.steps{position:relative;min-height:clamp(240px,40vh,330px)}
+.step{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;
+  opacity:0;transform:translateY(14px);transition:opacity .5s,transform .5s;pointer-events:none}
+.step.on{opacity:1;transform:none;pointer-events:auto}
+.snum{font:700 10px/1 var(--mono);letter-spacing:.24em;color:var(--gold);margin-bottom:13px}
+.step h3{font-family:var(--serif);font-size:clamp(16px,1.85vw,22px);color:#f3eddf;margin-bottom:10px;line-height:1.5}
+.step p{font-size:13.8px;line-height:1.9;color:var(--mut)}
+.step p strong{color:#f0e7d5;font-weight:600}
+.sdots{display:flex;gap:6px;margin-top:18px}
+.sdots i{width:15px;height:2px;background:rgba(255,255,255,.16);transition:.3s}
+.sdots i.on{background:var(--gold);width:24px}
+
+/* 折叠 */
+details{border-radius:14px;overflow:hidden;border:1px solid var(--line2);background:rgba(255,255,255,.025)}
+details>summary{cursor:pointer;list-style:none;padding:13px 18px;font:600 13px/1.6 var(--sans);color:#e6dfd0;
+  display:flex;align-items:center;gap:10px}
+details>summary::-webkit-details-marker{display:none}
+details>summary::after{content:"+";margin-left:auto;color:var(--gold);font-weight:400;font-size:16px;transition:.3s}
+details[open]>summary::after{transform:rotate(45deg)}
+details .body{padding:0 20px 18px;font-size:13.6px;line-height:1.95;color:var(--mut)}
+details .body p{margin-bottom:.7em}
+details .body b{color:#f0e7d5}
+.tag{font:700 9.5px/1 var(--mono);letter-spacing:.14em;background:rgba(232,176,75,.16);
+  color:var(--gold);padding:4px 7px;border-radius:4px}
+.tag.blue{background:rgba(98,208,255,.14);color:var(--cyan)}
+.formula{display:block;text-align:center;font-family:var(--serif);font-size:16px;color:#f0e7d5;
+  padding:11px 8px;margin:11px 0;background:rgba(255,255,255,.04);border-radius:9px;letter-spacing:.01em}
+code{font:500 12.5px/1.4 var(--mono);background:rgba(255,255,255,.07);padding:2px 6px;border-radius:4px;color:#e7dfd0}
+
+/* 推导页 */
+.proofs{font-size:12.6px;line-height:1.9}
+.proofs .formula{font-size:14.5px;margin:9px 0;padding:9px 6px}
+@media(min-width:1180px){
+  .proofs{columns:2;column-gap:34px;column-rule:1px solid rgba(255,255,255,.07)}
+  .proofs>p,.proofs>.formula{break-inside:avoid}
+}
+.stepnum{color:var(--cyan);font-weight:700;font-family:var(--mono);font-size:12px;margin-right:6px}
+
+/* 章卡 */
+.map{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-top:20px}
+.mcard{background:rgba(255,255,255,.03);border:1px solid var(--line2);border-radius:12px;padding:12px 13px;
+  cursor:pointer;transition:.22s}
+.mcard:hover{background:rgba(255,255,255,.06);border-color:rgba(232,176,75,.45);transform:translateY(-2px)}
+.mcard .n{font:700 9.5px/1 var(--mono);color:var(--gold);letter-spacing:.14em}
+.mcard h5{font-family:var(--serif);font-size:14px;margin:7px 0 0;color:#f0eade;font-weight:700}
+.mcard .one{font-size:11.5px;color:var(--dim);line-height:1.6;margin-top:5px}
+.mcard.here{border-color:rgba(232,176,75,.6);background:rgba(232,176,75,.10)}
+
+/* 小测 */
+.qs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.q{background:rgba(255,255,255,.028);border:1px solid var(--line2);border-radius:13px;padding:14px 16px}
+.q .stem{font-size:13px;line-height:1.7;color:#ece5d7;margin-bottom:9px;font-weight:500}
+.opt{display:flex;gap:8px;align-items:flex-start;padding:7px 10px;border:1px solid var(--line2);
+  border-radius:8px;cursor:pointer;font-size:12.3px;line-height:1.6;color:#b9c2cf;margin-bottom:6px;transition:.16s}
+.opt:hover{background:rgba(255,255,255,.05)}
+.opt .k{font:700 10.5px/1.5 var(--mono);color:var(--dim);flex:none}
+.opt.right{border-color:rgba(79,191,168,.7);background:rgba(79,191,168,.12);color:#d8f5ec}
+.opt.wrong{border-color:rgba(217,83,74,.65);background:rgba(217,83,74,.12);color:#ffd7d2}
+.opt.locked{cursor:default}
+.fb{font-size:11.6px;line-height:1.7;color:var(--teal);margin-top:4px;display:none}
+.fb.show{display:block}
+.fb.bad{color:#ffb4a6}
+.score{display:flex;align-items:center;gap:16px;margin-top:14px;font-size:12.5px;color:var(--dim);flex-wrap:wrap}
+.score b{color:var(--gold);font-size:17px;font-family:var(--serif)}
+.done{display:flex;align-items:center;gap:12px;margin-top:12px;padding:11px 14px;
+  border:1px dashed rgba(79,191,168,.45);border-radius:12px;background:rgba(79,191,168,.06);cursor:pointer}
+.done input{appearance:none;width:20px;height:20px;border:2px solid var(--teal);border-radius:6px;
+  flex:none;cursor:pointer;position:relative;background:transparent}
+.done input:checked{background:var(--teal)}
+.done input:checked::after{content:"✓";position:absolute;inset:0;color:#08120f;font-size:13px;
+  display:flex;align-items:center;justify-content:center;font-weight:700}
+.done span{font-size:12.5px;color:#a9d9cf}
+
+/* ================= 5. 响应式 ================= */
+@media(max-width:980px){
+  .split,.split.rev{grid-template-columns:1fr;gap:20px}
+  .map{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .qs{grid-template-columns:1fr}
+  .dots{display:none}
+  .where{display:none}
+}
+@media(max-width:640px){
+  body{font-size:15px}
+  .page{padding:18px 16px}
+  .steps{min-height:0}
+  .step{position:static;opacity:1;transform:none;pointer-events:auto;margin-bottom:16px}
+  .step:last-child{margin-bottom:0}
+  .tip{display:none}
+}
+@media(prefers-reduced-motion:reduce){
+  .a{opacity:1;transform:none}
+  .bg .orb,.bg .mesh{animation:none}
+  .page{transition:opacity .2s}
+}
+
+/* 页脚角标：对应原书节号 */
+.pfoot{position:absolute;right:clamp(20px,4vw,56px);bottom:12px;font:11px/1 var(--mono);
+  color:var(--dim);opacity:.8;letter-spacing:.06em;pointer-events:none}
+</style>
+</head>
+<body>
+
+<div class="bg" aria-hidden="true">
+  <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+  <div class="mesh"></div>
+</div>
+
+<div class="rail" id="rail"></div>
+<nav class="dots" id="dots" aria-label="页面导航"></nav>
+<div class="where" id="where"></div>
+<div class="counter" id="counter"><b>01</b> / 18</div>
+<div class="tip" id="tip"><i></i>滚动滚轮 · 或按 ↓ / 空格 翻页</div>
+
+<main class="deck" id="deck">
+
+  <!-- ========== 01 封面 ========== -->
+  <section class="page" data-title="封面">
+    <div class="page-inner center">
+      <div class="a kicker" style="justify-content:center">第 1 章 · CHAPTER ONE</div>
+      <h1 class="a" style="font-size:clamp(30px,5.6vw,64px);line-height:1.16;color:#f6f1e6;margin:6px 0 0">
+        混沌之前，<br>先学会<em>用眼睛</em>看动力学
+      </h1>
+      <p class="a p" style="max-width:44em;margin:26px auto 0;color:var(--mut)">
+        这本书真正要送给你的不是一堆公式，而是一副新的眼睛：把方程变成图，<br>让"未来会怎样"这件事，能在一张纸上被看见。</p>
+      <div class="a chips" style="justify-content:center;margin-top:30px">
+        <span>原书 第 1 章「概述」</span><span>约 40 分钟</span><span>4 个可玩演示</span><span>2 个完整推导</span><span>5 道自测</span>
+      </div>
+    </div>
+  
+  <div class="pfoot">—</div>
+</section>
+
+
+  <!-- ========== 02 悖论 ========== -->
+  <section class="page" data-title="能算出答案的问题，从来是少数">
+    <div class="page-inner">
+      <div class="split">
+        <div>
+          <div class="a kicker">THE PARADOX · 一个悖论</div>
+          <h2 class="a">能算出答案的问题，从来是少数</h2>
+          <p class="a p">1666 年，牛顿用万有引力把月亮"按"回了椭圆轨道。两个天体互相绕转，什么时候在哪儿，写得清清楚楚。</p>
+          <p class="a p">然后就卡住了。<strong>三个天体</strong>一凑，方程立刻变成一团乱麻。1889 年庞加莱为瑞典国王的悬赏去啃三体问题，最后给出的结论是：一般的三体问题，<strong>没有能写出来的解</strong>。</p>
+          <p class="a p">可抬头看，月亮照样升落，潮汐照样涨退。系统一点儿都没有"因为算不出来"而变糊涂。</p>
+          <div class="a pull">算不出来，不等于看不懂。<cite>—— 这本书的全部起点</cite></div>
+        </div>
+        <div class="a fig" style="padding:20px">
+          <svg viewBox="0 0 480 320" role="img" aria-label="三体问题的三条轨道"><g fill="none" stroke-width="1.5" stroke-linejoin="round" opacity=".92"><path d="M74.1 120.7 L74.2 121.0 L75.2 127.1 L76.5 133.4 L78.1 139.8 L80.0 146.3 L82.2 153.0 L84.8 159.9 L87.8 166.8 L91.2 173.9 L95.1 181.2 L99.4 188.6 L104.3 196.1 L109.8 203.8 L116.1 211.5 L123.2 219.3 L131.4 227.0 L140.8 234.6 L151.8 241.6 L164.6 247.5 L179.0 251.3 L193.8 252.3 L207.9 250.6 L220.5 247.2 L231.6 242.8 L241.5 237.9 L250.4 232.7 L258.5 227.3 L265.9 221.7 L272.7 216.0 L279.1 210.2 L284.9 204.2 L290.3 198.1 L295.3 191.9 L299.9 185.5 L304.1 178.9 L307.9 172.1 L311.2 165.2 L314.1 158.1 L316.4 150.8 L318.3 143.4 L319.6 135.8 L320.4 128.2 L320.6 120.6 L320.2 113.0 L319.2 105.4 L317.6 98.0 L315.5 90.8 L312.8 83.8 L309.6 77.0 L305.9 70.6 L301.8 64.5 L297.4 58.7 L292.6 53.4 L287.4 48.4 L282.0 43.9 L276.5 39.7 L270.7 36.0 L264.7 32.6 L258.7 29.7 L252.6 27.2 L246.4 25.1 L240.2 23.4 L233.9 22.1 L227.7 21.2 L221.4 20.7 L215.2 20.7 L208.9 21.0 L202.7 21.8 L196.6 22.9 L190.5 24.5 L184.4 26.4 L178.4 28.7 L172.5 31.5 L166.7 34.6 L161.0 38.1 L155.4 42.1 L149.9 46.5 L144.5 51.3 L139.3 56.6 L134.3 62.4 L129.5 68.7 L125.0 75.5 L120.7 82.9 L116.9 91.0 L113.5 99.8 L110.8 109.5 L109.1 120.0 L108.6 131.5 L110.1 143.9 L114.5 156.4 L121.8 167.5 L130.6 175.6 L139.4 181.0 L147.4 184.6 L154.6 187.0 L161.0 188.6 L166.8 189.6 L172.1 190.2 L176.8 190.5 L181.1 190.5 L185.1 190.4 L188.7 190.2 L192.0 189.8 L195.1 189.4 L197.9 188.8 L200.5 188.3 L203.0 187.6 L205.2 187.0 L207.3 186.3 L209.3 185.6 L211.2 184.9 L212.9 184.1 L214.5 183.4 L216.0 182.6 L217.5 181.9 L218.8 181.1 L220.1 180.4 L221.3 179.6 L222.5 178.9 L223.6 178.1 L224.7 177.4 L225.7 176.6 L226.7 175.9 L227.7 175.2 L228.6 174.5 L229.5 173.8 L230.4 173.0 L231.3 172.3 L232.2 171.6 L233.1 170.9 L234.1 170.2 L235.0 169.4 L235.9 168.7 L236.9 167.9 L237.9 167.1 L239.0 166.3 L240.1 165.4" stroke="#62d0ff"/><path d="M388.0 120.7 L388.0 120.4 L387.0 114.5 L385.7 108.6 L384.2 103.0 L382.4 97.5 L380.4 92.1 L378.1 87.0 L375.6 82.0 L372.8 77.1 L369.9 72.5 L366.7 68.1 L363.2 63.8 L359.6 59.8 L355.7 55.9 L351.6 52.3 L347.3 48.9 L342.7 45.8 L338.0 42.9 L333.0 40.3 L327.8 37.9 L322.4 35.8 L316.8 33.9 L311.1 32.4 L305.1 31.1 L299.0 30.1 L292.8 29.5 L286.4 29.2 L279.9 29.3 L273.3 29.7 L266.6 30.6 L259.9 31.8 L253.1 33.5 L246.4 35.7 L239.7 38.3 L233.2 41.4 L226.7 45.0 L220.4 49.0 L214.3 53.6 L208.6 58.7 L203.1 64.2 L198.0 70.1 L193.3 76.5 L189.0 83.3 L185.2 90.4 L181.8 97.8 L179.0 105.4 L176.7 113.3 L174.8 121.4 L173.5 129.7 L172.6 138.1 L172.2 146.7 L172.2 155.5 L172.7 164.4 L173.7 173.6 L175.2 183.2 L177.2 193.0 L180.0 203.3 L183.8 214.2 L188.8 225.6 L195.8 237.5 L205.3 249.2 L217.5 259.2 L231.0 266.3 L244.5 270.9 L257.3 273.6 L269.4 275.0 L280.7 275.5 L291.4 275.4 L301.5 274.7 L311.0 273.5 L320.1 272.0 L328.7 270.2 L337.0 268.2 L344.8 265.9 L352.3 263.5 L359.4 260.8 L366.3 258.0 L372.8 255.1 L379.0 252.0 L385.0 248.8 L390.6 245.5 L396.0 242.1 L401.2 238.7 L406.1 235.1 L410.7 231.4 L415.2 227.7 L419.4 223.9 L423.3 220.1 L427.1 216.2 L430.6 212.2 L434.0 208.2 L437.1 204.2 L440.1 200.1 L442.9 196.0 L445.5 191.9 L447.9 187.8 L450.1 183.7 L452.1 179.5 L453.9 175.4 L455.6 171.2 L457.0 167.1 L458.3 162.9 L459.4 158.8 L460.3 154.7 L461.0 150.6 L461.5 146.6 L461.8 142.5 L462.0 138.5 L462.0 134.6 L461.7 130.6 L461.3 126.7 L460.7 122.9 L459.9 119.0 L458.9 115.3 L457.8 111.5 L456.4 107.9 L454.8 104.3 L453.1 100.7 L451.1 97.2 L449.0 93.8 L446.6 90.5 L444.1 87.2 L441.3 84.0 L438.4 80.9 L435.2 77.9 L431.8 75.0 L428.3 72.2 L424.5 69.5 L420.4 67.0 L416.2 64.5 L411.7 62.2 L407.0 60.0 L402.1 58.0 L396.9 56.1 L391.4 54.4 L385.7 52.9 L379.8 51.7" stroke="#e8b04b"/><path d="M231.1 251.5 L231.1 251.5 L231.1 251.5 L231.1 251.2 L231.0 250.7 L230.9 249.8 L230.6 248.6 L230.3 247.1 L229.8 245.3 L229.2 243.2 L228.3 240.7 L227.2 238.0 L225.7 234.9 L223.8 231.4 L221.5 227.7 L218.4 223.7 L214.6 219.5 L209.7 215.3 L203.4 211.3 L195.6 208.2 L186.5 207.0 L177.0 208.3 L168.5 212.0 L161.7 217.1 L156.5 222.9 L152.7 229.0 L150.1 235.0 L148.4 240.9 L147.5 246.6 L147.2 252.0 L147.6 257.2 L148.5 262.0 L149.8 266.6 L151.5 270.9 L153.6 274.9 L156.0 278.5 L158.7 281.9 L161.6 284.9 L164.8 287.6 L168.3 290.0 L171.9 292.1 L175.7 293.8 L179.6 295.2 L183.7 296.3 L187.9 297.0 L192.2 297.3 L196.6 297.2 L201.1 296.7 L205.6 295.8 L210.2 294.5 L214.7 292.7 L219.2 290.4 L223.7 287.5 L228.0 284.1 L232.1 280.0 L236.0 275.2 L239.5 269.7 L242.5 263.3 L244.7 255.9 L245.7 247.6 L244.9 238.3 L241.5 229.0 L235.6 220.9 L228.3 215.2 L221.1 211.7 L214.5 209.6 L208.7 208.4 L203.6 207.7 L199.1 207.3 L195.2 207.1 L191.7 206.8 L188.7 206.5 L186.1 206.2 L183.7 205.7 L181.7 205.0 L180.0 204.1 L178.4 202.9 L177.1 201.5 L175.9 199.8 L174.9 197.7 L174.0 195.3 L173.1 192.5 L172.2 189.2 L171.3 185.5 L170.3 181.1 L169.0 176.1 L167.2 170.4 L164.8 163.8 L161.3 156.3 L156.0 148.0 L148.1 139.6 L137.5 132.7 L125.5 128.8 L113.8 127.6 L103.0 128.3 L93.2 130.2 L84.3 132.9 L76.4 136.2 L69.1 140.0 L62.5 144.0 L56.6 148.2 L51.2 152.7 L46.3 157.2 L41.9 161.9 L37.9 166.6 L34.4 171.4 L31.2 176.2 L28.4 181.0 L26.0 185.9 L23.9 190.7 L22.2 195.5 L20.8 200.3 L19.6 205.1 L18.8 209.8 L18.3 214.5 L18.0 219.2 L18.0 223.8 L18.3 228.3 L18.8 232.8 L19.6 237.2 L20.6 241.5 L21.9 245.8 L23.4 249.9 L25.2 254.0 L27.2 258.0 L29.4 261.9 L31.9 265.7 L34.5 269.4 L37.4 272.9 L40.6 276.4 L43.9 279.8 L47.5 283.0 L51.2 286.1 L55.2 289.0 L59.4 291.8 L63.9 294.5 L68.5 297.0 L73.3 299.3" stroke="#ff9770"/></g><g stroke="#0a0d12" stroke-width="2"><circle cx="240.1" cy="165.4" r="4.6" fill="#62d0ff"/><circle cx="379.8" cy="51.7" r="4.6" fill="#e8b04b"/><circle cx="73.3" cy="299.3" r="4.6" fill="#ff9770"/></g></svg>
+          <div class="figcap">三条彩色线＝三个天体各自的轨迹（等质量三体，数值积分 9 个时间单位）。它不重复、也没有能写出来的公式，但每一点都由同一组方程决定。</div>
+        </div>
+      </div>
+    </div>
+  
+  <div class="pfoot">§1.1 动力学简史</div>
+</section>
+
+
+  <!-- ========== 03 换问法 ========== -->
+  <section class="page" data-title="不问「它在哪」，问「它能去哪」">
+    <div class="page-inner">
+      <div class="split rev">
+        <div class="a fig" style="padding:20px">
+          <svg viewBox="0 0 480 320" role="img" aria-label="一族同方程的解"><g fill="none" stroke="rgba(98,208,255,.26)" stroke-width="1.2"><path d="M18.0 194.4 L18.7 194.3 L43.0 195.2 L68.3 199.7 L95.1 202.4 L121.7 198.8 L145.8 187.6 L165.2 171.7 L178.9 154.6 L186.9 138.4 L189.7 124.0 L187.9 111.1 L181.9 99.7 L172.3 89.9 L159.8 82.6 L145.4 79.0 L130.5 79.8 L116.7 85.2 L105.3 93.9 L97.2 104.4 L92.7 115.3 L92.0 125.6 L94.5 134.5 L99.7 141.6 L106.9 146.3 L115.3 148.1 L123.8 147.2 L131.6 143.7 L137.8 138.3 L142.0 132.0 L144.0 125.4 L143.8 119.3 L141.7 114.2 L138.1 110.6 L133.6 108.5 L128.6 108.3 L123.8 109.6 L119.7 112.2 L116.7 115.6 L114.9 119.5 L114.4 123.2 L115.1 126.6 L116.8 129.1 L119.3 130.8 L122.1 131.4 L125.0 131.0 L127.5 129.7 L129.6 127.9 L131.0 125.7 L131.6 123.5 L131.4 121.4 L130.6 119.7 L129.3 118.5 L127.8 117.9"/><path d="M53.8 242.0 L54.9 242.0 L95.3 240.6 L134.0 230.8 L167.6 211.3 L193.9 189.3 L213.2 170.5 L226.9 156.7 L236.7 147.5 L244.1 141.8 L249.9 138.8 L255.1 137.8 L260.3 138.6 L266.1 141.0 L272.9 145.0 L281.3 150.6 L291.9 157.6 L305.1 165.7 L321.1 173.7 L339.4 179.6 L359.1 180.9 L378.3 176.5 L395.0 166.8 L407.8 154.0 L416.1 140.3 L419.7 127.1 L419.1 115.1 L414.7 104.8 L407.1 96.7 L397.2 91.5 L386.1 89.7 L375.1 91.6 L365.2 96.6 L357.5 103.8 L352.4 112.1 L350.2 120.5 L350.7 128.1 L353.6 134.5 L358.4 139.1 L364.5 141.6 L370.9 141.8 L377.1 140.0 L382.4 136.5 L386.3 132.0 L388.5 127.0 L389.1 122.1 L388.1 117.8 L385.8 114.5 L382.6 112.5 L378.9 111.7 L375.2 112.3 L371.9 113.9 L369.2 116.3 L367.5 119.1"/><path d="M89.5 210.2 L90.4 210.3 L119.7 206.7 L146.4 194.9 L168.1 177.8 L183.7 159.6 L193.3 142.9 L197.6 128.2 L197.1 115.3 L192.6 103.6 L184.2 92.9 L172.4 83.8 L157.9 77.4 L141.9 75.0 L126.0 77.5 L111.7 84.6 L100.4 94.9 L92.8 106.4 L89.2 118.0 L89.4 128.6 L92.9 137.7 L99.2 144.6 L107.5 148.9 L116.6 150.2 L125.7 148.5 L133.8 144.2 L140.1 138.1 L144.1 131.1 L145.7 124.1 L145.0 117.8 L142.4 112.6 L138.2 109.0 L133.2 107.2 L127.8 107.2 L122.7 109.0 L118.5 112.0 L115.5 115.9 L113.8 120.1 L113.6 124.1 L114.6 127.5 L116.6 130.1 L119.4 131.6 L122.5 132.0 L125.5 131.4 L128.2 130.0 L130.3 127.9 L131.6 125.5 L132.1 123.1 L131.8 120.9 L130.8 119.2 L129.4 118.0 L127.6 117.5 L125.8 117.6 L124.1 118.3"/><path d="M121.3 250.0 L122.6 249.6 L162.7 230.3 L195.1 206.4 L220.0 186.4 L239.1 173.4 L255.1 167.0 L269.8 166.1 L285.0 169.4 L301.8 175.6 L320.9 182.5 L342.1 187.1 L364.1 186.6 L384.7 179.7 L402.1 167.6 L414.9 153.1 L422.7 138.4 L425.6 124.6 L424.1 112.2 L418.6 101.6 L409.9 93.3 L398.8 87.9 L386.5 86.2 L374.4 88.5 L363.6 94.2 L355.2 102.3 L349.8 111.4 L347.5 120.6 L348.1 128.9 L351.4 135.9 L356.8 140.8 L363.4 143.5 L370.6 143.8 L377.4 141.7 L383.2 137.9 L387.5 132.9 L390.0 127.4 L390.6 122.0 L389.5 117.3 L387.0 113.7 L383.4 111.4 L379.4 110.6 L375.3 111.2 L371.6 112.9 L368.7 115.6 L366.7 118.7 L365.9 121.9 L366.1 124.9 L367.2 127.3 L369.1 129.0 L371.3 129.9 L373.7 129.8 L376.0 129.1 L377.9 127.7"/><path d="M155.1 226.1 L156.1 225.5 L187.2 202.8 L210.7 182.0 L228.1 166.9 L241.3 157.4 L252.1 152.6 L262.0 151.6 L272.0 153.7 L283.2 158.5 L296.5 165.3 L312.2 173.0 L330.5 179.9 L350.6 183.2 L370.9 181.0 L389.5 172.8 L404.4 160.5 L414.9 146.6 L420.6 132.7 L421.7 119.8 L418.7 108.5 L412.2 99.2 L402.9 92.4 L391.9 88.9 L380.3 89.1 L369.4 92.9 L360.3 99.4 L353.7 107.6 L350.0 116.4 L349.2 124.7 L351.2 132.0 L355.3 137.7 L361.0 141.3 L367.6 142.6 L374.2 141.7 L380.2 138.9 L384.9 134.6 L388.1 129.6 L389.5 124.4 L389.3 119.7 L387.5 115.8 L384.6 113.0 L380.9 111.6 L377.1 111.5 L373.4 112.6 L370.2 114.8 L368.0 117.5 L366.7 120.6 L366.4 123.5 L367.1 126.1 L368.5 128.0 L370.5 129.1 L372.7 129.5 L375.0 129.1"/><path d="M188.8 202.3 L189.6 201.6 L212.8 181.3 L230.0 166.7 L243.3 157.8 L254.3 153.6 L264.6 153.3 L275.4 156.1 L287.5 161.5 L301.9 168.7 L318.7 176.3 L338.0 182.1 L358.5 183.4 L378.5 178.7 L395.9 168.6 L409.3 155.4 L417.9 141.2 L421.8 127.6 L421.3 115.2 L416.9 104.6 L409.2 96.1 L399.0 90.5 L387.6 88.4 L376.0 90.0 L365.6 95.0 L357.3 102.3 L351.8 110.9 L349.2 119.6 L349.5 127.7 L352.4 134.4 L357.2 139.4 L363.3 142.2 L370.1 142.6 L376.6 141.0 L382.2 137.5 L386.4 132.9 L388.9 127.7 L389.7 122.6 L388.8 118.1 L386.6 114.5 L383.3 112.2 L379.5 111.3 L375.6 111.7 L372.1 113.3 L369.3 115.7 L367.3 118.7 L366.4 121.7 L366.5 124.5 L367.5 126.9 L369.2 128.5 L371.3 129.4 L373.6 129.5 L375.7 128.8 L377.6 127.6"/><path d="M224.6 238.1 L225.7 237.4 L261.9 223.2 L295.3 220.5 L328.8 222.2 L362.4 219.6 L393.6 207.9 L419.5 189.5 L438.7 169.8 L451.6 152.2 L459.1 137.7 L462.0 125.5 L461.0 114.8 L456.6 104.8 L448.8 95.0 L437.7 85.4 L423.5 77.0 L406.8 71.3 L388.9 70.0 L371.5 74.2 L356.4 83.1 L344.8 94.8 L337.5 107.5 L334.4 119.9 L335.3 131.0 L339.8 140.5 L347.1 147.7 L356.3 152.0 L366.5 153.0 L376.5 150.8 L385.2 145.7 L391.9 138.9 L396.0 131.2 L397.5 123.5 L396.6 116.7 L393.5 111.1 L388.8 107.3 L383.2 105.5 L377.2 105.7 L371.7 107.8 L367.1 111.2 L363.9 115.5 L362.2 120.1 L362.0 124.5 L363.2 128.2 L365.6 131.0 L368.6 132.6 L372.0 133.0 L375.4 132.2 L378.3 130.6 L380.6 128.2 L382.0 125.6 L382.4 122.9 L382.1 120.6"/></g><path d="M121.3 250.0 L122.6 249.6 L162.7 230.3 L195.1 206.4 L220.0 186.4 L239.1 173.4 L255.1 167.0 L269.8 166.1 L285.0 169.4 L301.8 175.6 L320.9 182.5 L342.1 187.1 L364.1 186.6 L384.7 179.7 L402.1 167.6 L414.9 153.1 L422.7 138.4 L425.6 124.6 L424.1 112.2 L418.6 101.6 L409.9 93.3 L398.8 87.9 L386.5 86.2 L374.4 88.5 L363.6 94.2 L355.2 102.3 L349.8 111.4 L347.5 120.6 L348.1 128.9 L351.4 135.9 L356.8 140.8 L363.4 143.5 L370.6 143.8 L377.4 141.7 L383.2 137.9 L387.5 132.9 L390.0 127.4 L390.6 122.0 L389.5 117.3 L387.0 113.7 L383.4 111.4 L379.4 110.6 L375.3 111.2 L371.6 112.9 L368.7 115.6 L366.7 118.7 L365.9 121.9 L366.1 124.9 L367.2 127.3 L369.1 129.0 L371.3 129.9 L373.7 129.8 L376.0 129.1 L377.9 127.7" fill="none" stroke="#ff9770" stroke-width="2.2" stroke-linejoin="round"/><circle cx="121.3" cy="250.0" r="4.6" fill="#ff9770" stroke="#0a0d12" stroke-width="1.6"/></svg><div class="figcap">同一条方程、不同的初值：一族轨迹叠起来就是相图；加粗那条，是一次实验。</div>
+        </div>
+        <div>
+          <div class="a kicker">PHASE SPACE · 换一个问法</div>
+          <h2 class="a">不问「它在哪」，问「它能去哪」</h2>
+          <p class="a p">一条船，可以记它每天到哪儿——这叫<strong>解</strong>，是一条日志；也可以站在高处，把整条河的水流、漩涡、回水湾一次看完——这叫<strong>相图</strong>，是一张地图。</p>
+          <p class="a p">日志只管一条船的命。地图管<strong>所有船</strong>的命，只要它被丢在河上某个位置。把"一个系统的全部可能历史"画成一张图，未来就成了一个形状。</p>
+          <p class="a p">不同初值给出不同曲线，而且它们<strong>永不相交</strong>——同一点上只能有一个速度，也就只能有一条出路。</p>
+        </div>
+      </div>
+    </div>
+  
+  <div class="pfoot">§1.3 世界的动力学视角</div>
+</section>
+
+
+  <!-- ========== 04 演示01 ========== -->
+  <section class="page" data-title="演示 01 · 一条直线上的流" data-steps="3" data-hook="flow">
+    <div class="page-inner">
+      <div class="split" style="grid-template-columns:1.12fr .88fr">
+        <div class="a demo">
+          <canvas id="cv1" height="330"></canvas>
+          <div class="ctrls">
+            <div class="chips" style="margin:0;gap:7px" id="sys1">
+              <button class="chip" data-k="lin">ẋ = −x</button>
+              <button class="chip on" data-k="cubic">ẋ = x − x³</button>
+              <button class="chip" data-k="sin">ẋ = sin x</button>
+            </div>
+            <button class="btn" id="reset1">重来</button>
+          </div>
+          <div class="readout" id="ro1"></div>
+        </div>
+        <div class="a">
+          <div class="steps" id="st1">
+            <div class="step on">
+              <div class="snum">01 / 03 · 弹簧回到原位</div>
+              <h3>先看最简单的一条：<em>ẋ</em> = −x</h3>
+              <p>速度永远指回原点。无论把它放在哪儿，都被吸向 0——这就是<strong>不动点</strong>，而且是稳定的。整条数轴只有一种命运。</p>
+            </div>
+            <div class="step">
+              <div class="snum">02 / 03 · 三个零点</div>
+              <h3>再加一个零：<em>ẋ</em> = x − x³</h3>
+              <p>三个平衡点，两种命运：−1 与 1 是谷底，两侧都汇进来；0 是山顶，一阵风就推走。<strong>看斜率符号，就知道是山谷还是山顶。</strong></p>
+            </div>
+            <div class="step">
+              <div class="snum">03 / 03 · 无限重复</div>
+              <h3>周期性重复：<em>ẋ</em> = sin x</h3>
+              <p>零点每隔 π 出现一次，像台阶。一维系统只有汇合与发散，<strong>永远振荡不起来</strong>——要振荡，必须再加一个维度。</p>
+            </div>
+          </div>
+          <div class="sdots" id="sd1"><i class="on"></i><i></i><i></i></div>
+        </div>
+      </div>
+    </div>
+  
+  <div class="pfoot">§2.2 不动点与稳定性</div>
+</section>
+
+
+  <!-- ========== 05 相图四区 ========== -->
+  <section class="page" data-title="把时间，折进一张纸里">
+    <div class="page-inner">
+      <div class="a kicker">PHASE PORTRAIT · 一张纸上的全部命运</div>
+      <h2 class="a">把时间，折进一张纸里</h2>
+      <div class="split" style="margin-top:22px">
+        <div>
+          <p class="a p">一个系统在某一刻的全部信息，是一个点——比如钟摆的 <em>θ</em>（角度）和 <em>ω</em>（角速度）。时间过去了，这个点走出一条曲线。<strong>所有可能的曲线画在一起，就是相图。</strong></p>
+          <p class="a p">钟摆的相图长这样：中间是一圈圈同心环，两侧各有一道分水岭，把"来回摆"和"整圈翻过去"分成两个世界。那道分水岭是能量刚好够翻到正上方的那条临界线。</p>
+          <p class="a p">注意：<strong>我们一次都没解出 θ(t)</strong>，可"最终会怎样"已经写在这张图上了。这是本书最值钱的一次偷懒。</p>
+        </div>
+        <div class="a fig" style="padding:18px">
+          <svg viewBox="0 0 480 320" role="img" aria-label="钟摆相图"><line x1="16" y1="160" x2="464" y2="160" stroke="rgba(255,255,255,.16)"/><line x1="240" y1="22" x2="240" y2="298" stroke="rgba(255,255,255,.16)"/><g fill="none" stroke="#62d0ff" stroke-width="1.15" opacity=".8"><path d="M39.3 160.0 L42.7 160.0 L46.0 160.0 L49.4 160.0 L52.7 160.0 L56.0 160.0 L59.4 160.0 L62.7 160.0 L66.1 160.0 L69.4 160.0 L72.8 160.0 L76.1 160.0 L79.5 160.0 L82.8 160.0 L86.1 160.0 L89.5 160.0 L92.8 160.0 L96.2 160.0 L99.5 160.0 L102.9 160.0 L106.2 160.0 L109.6 160.0 L112.9 160.0 L116.2 160.0 L119.6 160.0 L122.9 160.0 L126.3 160.0 L129.6 160.0 L133.0 160.0 L136.3 160.0 L139.7 160.0 L143.0 160.0 L146.4 160.0 L149.7 160.0 L153.0 160.0 L156.4 160.0 L159.7 153.7 L163.1 145.4 L166.4 140.4 L169.8 136.6 L173.1 133.4 L176.5 130.6 L179.8 128.1 L183.1 125.9 L186.5 123.9 L189.8 122.1 L193.2 120.5 L196.5 119.0 L199.9 117.7 L203.2 116.4 L206.6 115.4 L209.9 114.4 L213.2 113.5 L216.6 112.8 L219.9 112.1 L223.3 111.6 L226.6 111.2 L230.0 110.8 L233.3 110.6 L236.7 110.4 L240.0 110.4 L243.3 110.4 L246.7 110.6 L250.0 110.8 L253.4 111.2 L256.7 111.6 L260.1 112.1 L263.4 112.8 L266.8 113.5 L270.1 114.4 L273.4 115.4 L276.8 116.4 L280.1 117.7 L283.5 119.0 L286.8 120.5 L290.2 122.1 L293.5 123.9 L296.9 125.9 L300.2 128.1 L303.5 130.6 L306.9 133.4 L310.2 136.6 L313.6 140.4 L316.9 145.4 L320.3 153.7 L323.6 160.0 L327.0 160.0 L330.3 160.0 L333.6 160.0 L337.0 160.0 L340.3 160.0 L343.7 160.0 L347.0 160.0 L350.4 160.0 L353.7 160.0 L357.1 160.0 L360.4 160.0 L363.8 160.0 L367.1 160.0 L370.4 160.0 L373.8 160.0 L377.1 160.0 L380.5 160.0 L383.8 160.0 L387.2 160.0 L390.5 160.0 L393.9 160.0 L397.2 160.0 L400.5 160.0 L403.9 160.0 L407.2 160.0 L410.6 160.0 L413.9 160.0 L417.3 160.0 L420.6 160.0 L424.0 160.0 L427.3 160.0 L430.6 160.0 L434.0 160.0 L437.3 160.0 L440.7 160.0 L440.7 160.0 L437.3 160.0 L434.0 160.0 L430.6 160.0 L427.3 160.0 L424.0 160.0 L420.6 160.0 L417.3 160.0 L413.9 160.0 L410.6 160.0 L407.2 160.0 L403.9 160.0 L400.5 160.0 L397.2 160.0 L393.9 160.0 L390.5 160.0 L387.2 160.0 L383.8 160.0 L380.5 160.0 L377.1 160.0 L373.8 160.0 L370.4 160.0 L367.1 160.0 L363.8 160.0 L360.4 160.0 L357.1 160.0 L353.7 160.0 L350.4 160.0 L347.0 160.0 L343.7 160.0 L340.3 160.0 L337.0 160.0 L333.6 160.0 L330.3 160.0 L327.0 160.0 L323.6 160.0 L320.3 166.3 L316.9 174.6 L313.6 179.6 L310.2 183.4 L306.9 186.6 L303.5 189.4 L300.2 191.9 L296.9 194.1 L293.5 196.1 L290.2 197.9 L286.8 199.5 L283.5 201.0 L280.1 202.3 L276.8 203.6 L273.4 204.6 L270.1 205.6 L266.8 206.5 L263.4 207.2 L260.1 207.9 L256.7 208.4 L253.4 208.8 L250.0 209.2 L246.7 209.4 L243.3 209.6 L240.0 209.6 L236.7 209.6 L233.3 209.4 L230.0 209.2 L226.6 208.8 L223.3 208.4 L219.9 207.9 L216.6 207.2 L213.2 206.5 L209.9 205.6 L206.6 204.6 L203.2 203.6 L199.9 202.3 L196.5 201.0 L193.2 199.5 L189.8 197.9 L186.5 196.1 L183.1 194.1 L179.8 191.9 L176.5 189.4 L173.1 186.6 L169.8 183.4 L166.4 179.6 L163.1 174.6 L159.7 166.3 L156.4 160.0 L153.0 160.0 L149.7 160.0 L146.4 160.0 L143.0 160.0 L139.7 160.0 L136.3 160.0 L133.0 160.0 L129.6 160.0 L126.3 160.0 L122.9 160.0 L119.6 160.0 L116.2 160.0 L112.9 160.0 L109.6 160.0 L106.2 160.0 L102.9 160.0 L99.5 160.0 L96.2 160.0 L92.8 160.0 L89.5 160.0 L86.1 160.0 L82.8 160.0 L79.5 160.0 L76.1 160.0 L72.8 160.0 L69.4 160.0 L66.1 160.0 L62.7 160.0 L59.4 160.0 L56.0 160.0 L52.7 160.0 L49.4 160.0 L46.0 160.0 L42.7 160.0 L39.3 160.0"/><path d="M39.3 160.0 L42.7 160.0 L46.0 160.0 L49.4 160.0 L52.7 160.0 L56.0 160.0 L59.4 160.0 L62.7 160.0 L66.1 160.0 L69.4 160.0 L72.8 160.0 L76.1 160.0 L79.5 160.0 L82.8 160.0 L86.1 160.0 L89.5 160.0 L92.8 160.0 L96.2 160.0 L99.5 160.0 L102.9 160.0 L106.2 160.0 L109.6 160.0 L112.9 160.0 L116.2 160.0 L119.6 160.0 L122.9 160.0 L126.3 147.4 L129.6 141.5 L133.0 137.1 L136.3 133.4 L139.7 130.2 L143.0 127.2 L146.4 124.5 L149.7 122.1 L153.0 119.8 L156.4 117.6 L159.7 115.6 L163.1 113.7 L166.4 111.9 L169.8 110.2 L173.1 108.6 L176.5 107.1 L179.8 105.7 L183.1 104.3 L186.5 103.1 L189.8 101.9 L193.2 100.9 L196.5 99.9 L199.9 98.9 L203.2 98.1 L206.6 97.3 L209.9 96.6 L213.2 96.0 L216.6 95.5 L219.9 95.0 L223.3 94.6 L226.6 94.3 L230.0 94.0 L233.3 93.8 L236.7 93.7 L240.0 93.7 L243.3 93.7 L246.7 93.8 L250.0 94.0 L253.4 94.3 L256.7 94.6 L260.1 95.0 L263.4 95.5 L266.8 96.0 L270.1 96.6 L273.4 97.3 L276.8 98.1 L280.1 98.9 L283.5 99.9 L286.8 100.9 L290.2 101.9 L293.5 103.1 L296.9 104.3 L300.2 105.7 L303.5 107.1 L306.9 108.6 L310.2 110.2 L313.6 111.9 L316.9 113.7 L320.3 115.6 L323.6 117.6 L327.0 119.8 L330.3 122.1 L333.6 124.5 L337.0 127.2 L340.3 130.2 L343.7 133.4 L347.0 137.1 L350.4 141.5 L353.7 147.4 L357.1 160.0 L360.4 160.0 L363.8 160.0 L367.1 160.0 L370.4 160.0 L373.8 160.0 L377.1 160.0 L380.5 160.0 L383.8 160.0 L387.2 160.0 L390.5 160.0 L393.9 160.0 L397.2 160.0 L400.5 160.0 L403.9 160.0 L407.2 160.0 L410.6 160.0 L413.9 160.0 L417.3 160.0 L420.6 160.0 L424.0 160.0 L427.3 160.0 L430.6 160.0 L434.0 160.0 L437.3 160.0 L440.7 160.0 L440.7 160.0 L437.3 160.0 L434.0 160.0 L430.6 160.0 L427.3 160.0 L424.0 160.0 L420.6 160.0 L417.3 160.0 L413.9 160.0 L410.6 160.0 L407.2 160.0 L403.9 160.0 L400.5 160.0 L397.2 160.0 L393.9 160.0 L390.5 160.0 L387.2 160.0 L383.8 160.0 L380.5 160.0 L377.1 160.0 L373.8 160.0 L370.4 160.0 L367.1 160.0 L363.8 160.0 L360.4 160.0 L357.1 160.0 L353.7 172.6 L350.4 178.5 L347.0 182.9 L343.7 186.6 L340.3 189.8 L337.0 192.8 L333.6 195.5 L330.3 197.9 L327.0 200.2 L323.6 202.4 L320.3 204.4 L316.9 206.3 L313.6 208.1 L310.2 209.8 L306.9 211.4 L303.5 212.9 L300.2 214.3 L296.9 215.7 L293.5 216.9 L290.2 218.1 L286.8 219.1 L283.5 220.1 L280.1 221.1 L276.8 221.9 L273.4 222.7 L270.1 223.4 L266.8 224.0 L263.4 224.5 L260.1 225.0 L256.7 225.4 L253.4 225.7 L250.0 226.0 L246.7 226.2 L243.3 226.3 L240.0 226.3 L236.7 226.3 L233.3 226.2 L230.0 226.0 L226.6 225.7 L223.3 225.4 L219.9 225.0 L216.6 224.5 L213.2 224.0 L209.9 223.4 L206.6 222.7 L203.2 221.9 L199.9 221.1 L196.5 220.1 L193.2 219.1 L189.8 218.1 L186.5 216.9 L183.1 215.7 L179.8 214.3 L176.5 212.9 L173.1 211.4 L169.8 209.8 L166.4 208.1 L163.1 206.3 L159.7 204.4 L156.4 202.4 L153.0 200.2 L149.7 197.9 L146.4 195.5 L143.0 192.8 L139.7 189.8 L136.3 186.6 L133.0 182.9 L129.6 178.5 L126.3 172.6 L122.9 160.0 L119.6 160.0 L116.2 160.0 L112.9 160.0 L109.6 160.0 L106.2 160.0 L102.9 160.0 L99.5 160.0 L96.2 160.0 L92.8 160.0 L89.5 160.0 L86.1 160.0 L82.8 160.0 L79.5 160.0 L76.1 160.0 L72.8 160.0 L69.4 160.0 L66.1 160.0 L62.7 160.0 L59.4 160.0 L56.0 160.0 L52.7 160.0 L49.4 160.0 L46.0 160.0 L42.7 160.0 L39.3 160.0"/><path d="M39.3 160.0 L42.7 160.0 L46.0 160.0 L49.4 160.0 L52.7 160.0 L56.0 160.0 L59.4 160.0 L62.7 160.0 L66.1 160.0 L69.4 160.0 L72.8 160.0 L76.1 160.0 L79.5 160.0 L82.8 160.0 L86.1 160.0 L89.5 160.0 L92.8 160.0 L96.2 160.0 L99.5 152.6 L102.9 145.6 L106.2 140.9 L109.6 137.1 L112.9 133.7 L116.2 130.6 L119.6 127.8 L122.9 125.2 L126.3 122.7 L129.6 120.4 L133.0 118.1 L136.3 116.0 L139.7 113.9 L143.0 112.0 L146.4 110.1 L149.7 108.3 L153.0 106.6 L156.4 105.0 L159.7 103.4 L163.1 101.9 L166.4 100.4 L169.8 99.1 L173.1 97.8 L176.5 96.5 L179.8 95.3 L183.1 94.2 L186.5 93.2 L189.8 92.2 L193.2 91.2 L196.5 90.4 L199.9 89.6 L203.2 88.9 L206.6 88.2 L209.9 87.6 L213.2 87.0 L216.6 86.6 L219.9 86.1 L223.3 85.8 L226.6 85.5 L230.0 85.3 L233.3 85.1 L236.7 85.0 L240.0 85.0 L243.3 85.0 L246.7 85.1 L250.0 85.3 L253.4 85.5 L256.7 85.8 L260.1 86.1 L263.4 86.6 L266.8 87.0 L270.1 87.6 L273.4 88.2 L276.8 88.9 L280.1 89.6 L283.5 90.4 L286.8 91.2 L290.2 92.2 L293.5 93.2 L296.9 94.2 L300.2 95.3 L303.5 96.5 L306.9 97.8 L310.2 99.1 L313.6 100.4 L316.9 101.9 L320.3 103.4 L323.6 105.0 L327.0 106.6 L330.3 108.3 L333.6 110.1 L337.0 112.0 L340.3 113.9 L343.7 116.0 L347.0 118.1 L350.4 120.4 L353.7 122.7 L357.1 125.2 L360.4 127.8 L363.8 130.6 L367.1 133.7 L370.4 137.1 L373.8 140.9 L377.1 145.6 L380.5 152.6 L383.8 160.0 L387.2 160.0 L390.5 160.0 L393.9 160.0 L397.2 160.0 L400.5 160.0 L403.9 160.0 L407.2 160.0 L410.6 160.0 L413.9 160.0 L417.3 160.0 L420.6 160.0 L424.0 160.0 L427.3 160.0 L430.6 160.0 L434.0 160.0 L437.3 160.0 L440.7 160.0 L440.7 160.0 L437.3 160.0 L434.0 160.0 L430.6 160.0 L427.3 160.0 L424.0 160.0 L420.6 160.0 L417.3 160.0 L413.9 160.0 L410.6 160.0 L407.2 160.0 L403.9 160.0 L400.5 160.0 L397.2 160.0 L393.9 160.0 L390.5 160.0 L387.2 160.0 L383.8 160.0 L380.5 167.4 L377.1 174.4 L373.8 179.1 L370.4 182.9 L367.1 186.3 L363.8 189.4 L360.4 192.2 L357.1 194.8 L353.7 197.3 L350.4 199.6 L347.0 201.9 L343.7 204.0 L340.3 206.1 L337.0 208.0 L333.6 209.9 L330.3 211.7 L327.0 213.4 L323.6 215.0 L320.3 216.6 L316.9 218.1 L313.6 219.6 L310.2 220.9 L306.9 222.2 L303.5 223.5 L300.2 224.7 L296.9 225.8 L293.5 226.8 L290.2 227.8 L286.8 228.8 L283.5 229.6 L280.1 230.4 L276.8 231.1 L273.4 231.8 L270.1 232.4 L266.8 233.0 L263.4 233.4 L260.1 233.9 L256.7 234.2 L253.4 234.5 L250.0 234.7 L246.7 234.9 L243.3 235.0 L240.0 235.0 L236.7 235.0 L233.3 234.9 L230.0 234.7 L226.6 234.5 L223.3 234.2 L219.9 233.9 L216.6 233.4 L213.2 233.0 L209.9 232.4 L206.6 231.8 L203.2 231.1 L199.9 230.4 L196.5 229.6 L193.2 228.8 L189.8 227.8 L186.5 226.8 L183.1 225.8 L179.8 224.7 L176.5 223.5 L173.1 222.2 L169.8 220.9 L166.4 219.6 L163.1 218.1 L159.7 216.6 L156.4 215.0 L153.0 213.4 L149.7 211.7 L146.4 209.9 L143.0 208.0 L139.7 206.1 L136.3 204.0 L133.0 201.9 L129.6 199.6 L126.3 197.3 L122.9 194.8 L119.6 192.2 L116.2 189.4 L112.9 186.3 L109.6 182.9 L106.2 179.1 L102.9 174.4 L99.5 167.4 L96.2 160.0 L92.8 160.0 L89.5 160.0 L86.1 160.0 L82.8 160.0 L79.5 160.0 L76.1 160.0 L72.8 160.0 L69.4 160.0 L66.1 160.0 L62.7 160.0 L59.4 160.0 L56.0 160.0 L52.7 160.0 L49.4 160.0 L46.0 160.0 L42.7 160.0 L39.3 160.0"/><path d="M39.3 160.0 L42.7 160.0 L46.0 160.0 L49.4 160.0 L52.7 160.0 L56.0 160.0 L59.4 160.0 L62.7 160.0 L66.1 160.0 L69.4 153.7 L72.8 148.7 L76.1 145.0 L79.5 141.8 L82.8 139.0 L86.1 136.3 L89.5 133.7 L92.8 131.3 L96.2 129.0 L99.5 126.7 L102.9 124.5 L106.2 122.3 L109.6 120.2 L112.9 118.2 L116.2 116.2 L119.6 114.3 L122.9 112.4 L126.3 110.5 L129.6 108.7 L133.0 107.0 L136.3 105.3 L139.7 103.6 L143.0 102.0 L146.4 100.5 L149.7 99.0 L153.0 97.5 L156.4 96.1 L159.7 94.7 L163.1 93.4 L166.4 92.2 L169.8 90.9 L173.1 89.8 L176.5 88.7 L179.8 87.6 L183.1 86.6 L186.5 85.7 L189.8 84.8 L193.2 84.0 L196.5 83.2 L199.9 82.5 L203.2 81.8 L206.6 81.2 L209.9 80.6 L213.2 80.1 L216.6 79.7 L219.9 79.3 L223.3 79.0 L226.6 78.7 L230.0 78.5 L233.3 78.4 L236.7 78.3 L240.0 78.3 L243.3 78.3 L246.7 78.4 L250.0 78.5 L253.4 78.7 L256.7 79.0 L260.1 79.3 L263.4 79.7 L266.8 80.1 L270.1 80.6 L273.4 81.2 L276.8 81.8 L280.1 82.5 L283.5 83.2 L286.8 84.0 L290.2 84.8 L293.5 85.7 L296.9 86.6 L300.2 87.6 L303.5 88.7 L306.9 89.8 L310.2 90.9 L313.6 92.2 L316.9 93.4 L320.3 94.7 L323.6 96.1 L327.0 97.5 L330.3 99.0 L333.6 100.5 L337.0 102.0 L340.3 103.6 L343.7 105.3 L347.0 107.0 L350.4 108.7 L353.7 110.5 L357.1 112.4 L360.4 114.3 L363.8 116.2 L367.1 118.2 L370.4 120.2 L373.8 122.3 L377.1 124.5 L380.5 126.7 L383.8 129.0 L387.2 131.3 L390.5 133.7 L393.9 136.3 L397.2 139.0 L400.5 141.8 L403.9 145.0 L407.2 148.7 L410.6 153.7 L413.9 160.0 L417.3 160.0 L420.6 160.0 L424.0 160.0 L427.3 160.0 L430.6 160.0 L434.0 160.0 L437.3 160.0 L440.7 160.0 L440.7 160.0 L437.3 160.0 L434.0 160.0 L430.6 160.0 L427.3 160.0 L424.0 160.0 L420.6 160.0 L417.3 160.0 L413.9 160.0 L410.6 166.3 L407.2 171.3 L403.9 175.0 L400.5 178.2 L397.2 181.0 L393.9 183.7 L390.5 186.3 L387.2 188.7 L383.8 191.0 L380.5 193.3 L377.1 195.5 L373.8 197.7 L370.4 199.8 L367.1 201.8 L363.8 203.8 L360.4 205.7 L357.1 207.6 L353.7 209.5 L350.4 211.3 L347.0 213.0 L343.7 214.7 L340.3 216.4 L337.0 218.0 L333.6 219.5 L330.3 221.0 L327.0 222.5 L323.6 223.9 L320.3 225.3 L316.9 226.6 L313.6 227.8 L310.2 229.1 L306.9 230.2 L303.5 231.3 L300.2 232.4 L296.9 233.4 L293.5 234.3 L290.2 235.2 L286.8 236.0 L283.5 236.8 L280.1 237.5 L276.8 238.2 L273.4 238.8 L270.1 239.4 L266.8 239.9 L263.4 240.3 L260.1 240.7 L256.7 241.0 L253.4 241.3 L250.0 241.5 L246.7 241.6 L243.3 241.7 L240.0 241.7 L236.7 241.7 L233.3 241.6 L230.0 241.5 L226.6 241.3 L223.3 241.0 L219.9 240.7 L216.6 240.3 L213.2 239.9 L209.9 239.4 L206.6 238.8 L203.2 238.2 L199.9 237.5 L196.5 236.8 L193.2 236.0 L189.8 235.2 L186.5 234.3 L183.1 233.4 L179.8 232.4 L176.5 231.3 L173.1 230.2 L169.8 229.1 L166.4 227.8 L163.1 226.6 L159.7 225.3 L156.4 223.9 L153.0 222.5 L149.7 221.0 L146.4 219.5 L143.0 218.0 L139.7 216.4 L136.3 214.7 L133.0 213.0 L129.6 211.3 L126.3 209.5 L122.9 207.6 L119.6 205.7 L116.2 203.8 L112.9 201.8 L109.6 199.8 L106.2 197.7 L102.9 195.5 L99.5 193.3 L96.2 191.0 L92.8 188.7 L89.5 186.3 L86.1 183.7 L82.8 181.0 L79.5 178.2 L76.1 175.0 L72.8 171.3 L69.4 166.3 L66.1 160.0 L62.7 160.0 L59.4 160.0 L56.0 160.0 L52.7 160.0 L49.4 160.0 L46.0 160.0 L42.7 160.0 L39.3 160.0"/></g><g fill="none" stroke="#4fbfa8" stroke-width="1.05" opacity=".55"><path d="M17.3 117.8 L22.2 118.7 L27.2 119.5 L32.1 120.0 L37.1 120.2 L42.0 120.2 L47.0 119.9 L51.9 119.3 L56.9 118.5 L61.8 117.5 L66.8 116.3 L71.7 114.9 L76.7 113.3 L81.6 111.7 L86.6 109.9 L91.5 108.0 L96.5 106.0 L101.4 104.1 L106.4 102.0 L111.3 100.0 L116.3 97.9 L121.2 95.9 L126.2 93.9 L131.1 91.9 L136.1 89.9 L141.0 88.0 L146.0 86.1 L150.9 84.3 L155.9 82.6 L160.8 80.9 L165.8 79.3 L170.7 77.8 L175.7 76.4 L180.6 75.1 L185.6 73.9 L190.5 72.7 L195.5 71.7 L200.4 70.8 L205.4 69.9 L210.3 69.2 L215.3 68.6 L220.2 68.1 L225.2 67.7 L230.1 67.4 L235.1 67.2 L240.0 67.2 L244.9 67.2 L249.9 67.4 L254.8 67.7 L259.8 68.1 L264.7 68.6 L269.7 69.2 L274.6 69.9 L279.6 70.8 L284.5 71.7 L289.5 72.7 L294.4 73.9 L299.4 75.1 L304.3 76.4 L309.3 77.8 L314.2 79.3 L319.2 80.9 L324.1 82.6 L329.1 84.3 L334.0 86.1 L339.0 88.0 L343.9 89.9 L348.9 91.9 L353.8 93.9 L358.8 95.9 L363.7 97.9 L368.7 100.0 L373.6 102.0 L378.6 104.1 L383.5 106.0 L388.5 108.0 L393.4 109.9 L398.4 111.7 L403.3 113.3 L408.3 114.9 L413.2 116.3 L418.2 117.5 L423.1 118.5 L428.1 119.3 L433.0 119.9 L438.0 120.2 L442.9 120.2 L447.9 120.0 L452.8 119.5 L457.8 118.7 L462.7 117.8"/><path d="M17.3 202.2 L22.2 201.3 L27.2 200.5 L32.1 200.0 L37.1 199.8 L42.0 199.8 L47.0 200.1 L51.9 200.7 L56.9 201.5 L61.8 202.5 L66.8 203.7 L71.7 205.1 L76.7 206.7 L81.6 208.3 L86.6 210.1 L91.5 212.0 L96.5 214.0 L101.4 215.9 L106.4 218.0 L111.3 220.0 L116.3 222.1 L121.2 224.1 L126.2 226.1 L131.1 228.1 L136.1 230.1 L141.0 232.0 L146.0 233.9 L150.9 235.7 L155.9 237.4 L160.8 239.1 L165.8 240.7 L170.7 242.2 L175.7 243.6 L180.6 244.9 L185.6 246.1 L190.5 247.3 L195.5 248.3 L200.4 249.2 L205.4 250.1 L210.3 250.8 L215.3 251.4 L220.2 251.9 L225.2 252.3 L230.1 252.6 L235.1 252.8 L240.0 252.8 L244.9 252.8 L249.9 252.6 L254.8 252.3 L259.8 251.9 L264.7 251.4 L269.7 250.8 L274.6 250.1 L279.6 249.2 L284.5 248.3 L289.5 247.3 L294.4 246.1 L299.4 244.9 L304.3 243.6 L309.3 242.2 L314.2 240.7 L319.2 239.1 L324.1 237.4 L329.1 235.7 L334.0 233.9 L339.0 232.0 L343.9 230.1 L348.9 228.1 L353.8 226.1 L358.8 224.1 L363.7 222.1 L368.7 220.0 L373.6 218.0 L378.6 215.9 L383.5 214.0 L388.5 212.0 L393.4 210.1 L398.4 208.3 L403.3 206.7 L408.3 205.1 L413.2 203.7 L418.2 202.5 L423.1 201.5 L428.1 200.7 L433.0 200.1 L438.0 199.8 L442.9 199.8 L447.9 200.0 L452.8 200.5 L457.8 201.3 L462.7 202.2"/><path d="M17.3 99.0 L22.2 99.7 L27.2 100.2 L32.1 100.5 L37.1 100.7 L42.0 100.7 L47.0 100.5 L51.9 100.1 L56.9 99.5 L61.8 98.8 L66.8 98.0 L71.7 97.0 L76.7 95.9 L81.6 94.6 L86.6 93.3 L91.5 91.9 L96.5 90.4 L101.4 88.8 L106.4 87.2 L111.3 85.6 L116.3 83.9 L121.2 82.3 L126.2 80.6 L131.1 78.9 L136.1 77.3 L141.0 75.6 L146.0 74.0 L150.9 72.5 L155.9 71.0 L160.8 69.5 L165.8 68.1 L170.7 66.8 L175.7 65.6 L180.6 64.4 L185.6 63.3 L190.5 62.3 L195.5 61.3 L200.4 60.5 L205.4 59.8 L210.3 59.1 L215.3 58.6 L220.2 58.1 L225.2 57.7 L230.1 57.5 L235.1 57.3 L240.0 57.3 L244.9 57.3 L249.9 57.5 L254.8 57.7 L259.8 58.1 L264.7 58.6 L269.7 59.1 L274.6 59.8 L279.6 60.5 L284.5 61.3 L289.5 62.3 L294.4 63.3 L299.4 64.4 L304.3 65.6 L309.3 66.8 L314.2 68.1 L319.2 69.5 L324.1 71.0 L329.1 72.5 L334.0 74.0 L339.0 75.6 L343.9 77.3 L348.9 78.9 L353.8 80.6 L358.8 82.3 L363.7 83.9 L368.7 85.6 L373.6 87.2 L378.6 88.8 L383.5 90.4 L388.5 91.9 L393.4 93.3 L398.4 94.6 L403.3 95.9 L408.3 97.0 L413.2 98.0 L418.2 98.8 L423.1 99.5 L428.1 100.1 L433.0 100.5 L438.0 100.7 L442.9 100.7 L447.9 100.5 L452.8 100.2 L457.8 99.7 L462.7 99.0"/><path d="M17.3 221.0 L22.2 220.3 L27.2 219.8 L32.1 219.5 L37.1 219.3 L42.0 219.3 L47.0 219.5 L51.9 219.9 L56.9 220.5 L61.8 221.2 L66.8 222.0 L71.7 223.0 L76.7 224.1 L81.6 225.4 L86.6 226.7 L91.5 228.1 L96.5 229.6 L101.4 231.2 L106.4 232.8 L111.3 234.4 L116.3 236.1 L121.2 237.7 L126.2 239.4 L131.1 241.1 L136.1 242.7 L141.0 244.4 L146.0 246.0 L150.9 247.5 L155.9 249.0 L160.8 250.5 L165.8 251.9 L170.7 253.2 L175.7 254.4 L180.6 255.6 L185.6 256.7 L190.5 257.7 L195.5 258.7 L200.4 259.5 L205.4 260.2 L210.3 260.9 L215.3 261.4 L220.2 261.9 L225.2 262.3 L230.1 262.5 L235.1 262.7 L240.0 262.7 L244.9 262.7 L249.9 262.5 L254.8 262.3 L259.8 261.9 L264.7 261.4 L269.7 260.9 L274.6 260.2 L279.6 259.5 L284.5 258.7 L289.5 257.7 L294.4 256.7 L299.4 255.6 L304.3 254.4 L309.3 253.2 L314.2 251.9 L319.2 250.5 L324.1 249.0 L329.1 247.5 L334.0 246.0 L339.0 244.4 L343.9 242.7 L348.9 241.1 L353.8 239.4 L358.8 237.7 L363.7 236.1 L368.7 234.4 L373.6 232.8 L378.6 231.2 L383.5 229.6 L388.5 228.1 L393.4 226.7 L398.4 225.4 L403.3 224.1 L408.3 223.0 L413.2 222.0 L418.2 221.2 L423.1 220.5 L428.1 219.9 L433.0 219.5 L438.0 219.3 L442.9 219.3 L447.9 219.5 L452.8 219.8 L457.8 220.3 L462.7 221.0"/><path d="M17.3 83.7 L22.2 84.2 L27.2 84.6 L32.1 84.9 L37.1 85.0 L42.0 85.0 L47.0 84.8 L51.9 84.5 L56.9 84.1 L61.8 83.5 L66.8 82.8 L71.7 82.0 L76.7 81.1 L81.6 80.1 L86.6 79.0 L91.5 77.8 L96.5 76.6 L101.4 75.3 L106.4 73.9 L111.3 72.6 L116.3 71.1 L121.2 69.7 L126.2 68.2 L131.1 66.8 L136.1 65.4 L141.0 63.9 L146.0 62.5 L150.9 61.2 L155.9 59.8 L160.8 58.5 L165.8 57.3 L170.7 56.1 L175.7 55.0 L180.6 53.9 L185.6 52.9 L190.5 52.0 L195.5 51.2 L200.4 50.4 L205.4 49.7 L210.3 49.1 L215.3 48.6 L220.2 48.2 L225.2 47.9 L230.1 47.7 L235.1 47.5 L240.0 47.5 L244.9 47.5 L249.9 47.7 L254.8 47.9 L259.8 48.2 L264.7 48.6 L269.7 49.1 L274.6 49.7 L279.6 50.4 L284.5 51.2 L289.5 52.0 L294.4 52.9 L299.4 53.9 L304.3 55.0 L309.3 56.1 L314.2 57.3 L319.2 58.5 L324.1 59.8 L329.1 61.2 L334.0 62.5 L339.0 63.9 L343.9 65.4 L348.9 66.8 L353.8 68.2 L358.8 69.7 L363.7 71.1 L368.7 72.6 L373.6 73.9 L378.6 75.3 L383.5 76.6 L388.5 77.8 L393.4 79.0 L398.4 80.1 L403.3 81.1 L408.3 82.0 L413.2 82.8 L418.2 83.5 L423.1 84.1 L428.1 84.5 L433.0 84.8 L438.0 85.0 L442.9 85.0 L447.9 84.9 L452.8 84.6 L457.8 84.2 L462.7 83.7"/><path d="M17.3 236.3 L22.2 235.8 L27.2 235.4 L32.1 235.1 L37.1 235.0 L42.0 235.0 L47.0 235.2 L51.9 235.5 L56.9 235.9 L61.8 236.5 L66.8 237.2 L71.7 238.0 L76.7 238.9 L81.6 239.9 L86.6 241.0 L91.5 242.2 L96.5 243.4 L101.4 244.7 L106.4 246.1 L111.3 247.4 L116.3 248.9 L121.2 250.3 L126.2 251.8 L131.1 253.2 L136.1 254.6 L141.0 256.1 L146.0 257.5 L150.9 258.8 L155.9 260.2 L160.8 261.5 L165.8 262.7 L170.7 263.9 L175.7 265.0 L180.6 266.1 L185.6 267.1 L190.5 268.0 L195.5 268.8 L200.4 269.6 L205.4 270.3 L210.3 270.9 L215.3 271.4 L220.2 271.8 L225.2 272.1 L230.1 272.3 L235.1 272.5 L240.0 272.5 L244.9 272.5 L249.9 272.3 L254.8 272.1 L259.8 271.8 L264.7 271.4 L269.7 270.9 L274.6 270.3 L279.6 269.6 L284.5 268.8 L289.5 268.0 L294.4 267.1 L299.4 266.1 L304.3 265.0 L309.3 263.9 L314.2 262.7 L319.2 261.5 L324.1 260.2 L329.1 258.8 L334.0 257.5 L339.0 256.1 L343.9 254.6 L348.9 253.2 L353.8 251.8 L358.8 250.3 L363.7 248.9 L368.7 247.4 L373.6 246.1 L378.6 244.7 L383.5 243.4 L388.5 242.2 L393.4 241.0 L398.4 239.9 L403.3 238.9 L408.3 238.0 L413.2 237.2 L418.2 236.5 L423.1 235.9 L428.1 235.5 L433.0 235.2 L438.0 235.0 L442.9 235.0 L447.9 235.1 L452.8 235.4 L457.8 235.8 L462.7 236.3"/></g><g fill="none" stroke="#e8b04b" stroke-width="1.7" stroke-dasharray="5 4"><path d="M39.3 159.7 L42.7 157.6 L46.0 155.4 L49.4 153.2 L52.7 151.0 L56.0 148.8 L59.4 146.7 L62.7 144.5 L66.1 142.3 L69.4 140.2 L72.8 138.1 L76.1 136.0 L79.5 133.9 L82.8 131.8 L86.1 129.8 L89.5 127.7 L92.8 125.7 L96.2 123.7 L99.5 121.8 L102.9 119.8 L106.2 117.9 L109.6 116.0 L112.9 114.2 L116.2 112.4 L119.6 110.6 L122.9 108.8 L126.3 107.1 L129.6 105.4 L133.0 103.8 L136.3 102.2 L139.7 100.6 L143.0 99.1 L146.4 97.6 L149.7 96.2 L153.0 94.8 L156.4 93.4 L159.7 92.1 L163.1 90.8 L166.4 89.6 L169.8 88.4 L173.1 87.3 L176.5 86.3 L179.8 85.2 L183.1 84.3 L186.5 83.4 L189.8 82.5 L193.2 81.7 L196.5 80.9 L199.9 80.2 L203.2 79.6 L206.6 79.0 L209.9 78.4 L213.2 78.0 L216.6 77.5 L219.9 77.2 L223.3 76.8 L226.6 76.6 L230.0 76.4 L233.3 76.2 L236.7 76.2 L240.0 76.1 L243.3 76.2 L246.7 76.2 L250.0 76.4 L253.4 76.6 L256.7 76.8 L260.1 77.2 L263.4 77.5 L266.8 78.0 L270.1 78.4 L273.4 79.0 L276.8 79.6 L280.1 80.2 L283.5 80.9 L286.8 81.7 L290.2 82.5 L293.5 83.4 L296.9 84.3 L300.2 85.2 L303.5 86.3 L306.9 87.3 L310.2 88.4 L313.6 89.6 L316.9 90.8 L320.3 92.1 L323.6 93.4 L327.0 94.8 L330.3 96.2 L333.6 97.6 L337.0 99.1 L340.3 100.6 L343.7 102.2 L347.0 103.8 L350.4 105.4 L353.7 107.1 L357.1 108.8 L360.4 110.6 L363.8 112.4 L367.1 114.2 L370.4 116.0 L373.8 117.9 L377.1 119.8 L380.5 121.8 L383.8 123.7 L387.2 125.7 L390.5 127.7 L393.9 129.8 L397.2 131.8 L400.5 133.9 L403.9 136.0 L407.2 138.1 L410.6 140.2 L413.9 142.3 L417.3 144.5 L420.6 146.7 L424.0 148.8 L427.3 151.0 L430.6 153.2 L434.0 155.4 L437.3 157.6 L440.7 159.7"/><path d="M39.3 160.3 L42.7 162.4 L46.0 164.6 L49.4 166.8 L52.7 169.0 L56.0 171.2 L59.4 173.3 L62.7 175.5 L66.1 177.7 L69.4 179.8 L72.8 181.9 L76.1 184.0 L79.5 186.1 L82.8 188.2 L86.1 190.2 L89.5 192.3 L92.8 194.3 L96.2 196.3 L99.5 198.2 L102.9 200.2 L106.2 202.1 L109.6 204.0 L112.9 205.8 L116.2 207.6 L119.6 209.4 L122.9 211.2 L126.3 212.9 L129.6 214.6 L133.0 216.2 L136.3 217.8 L139.7 219.4 L143.0 220.9 L146.4 222.4 L149.7 223.8 L153.0 225.2 L156.4 226.6 L159.7 227.9 L163.1 229.2 L166.4 230.4 L169.8 231.6 L173.1 232.7 L176.5 233.7 L179.8 234.8 L183.1 235.7 L186.5 236.6 L189.8 237.5 L193.2 238.3 L196.5 239.1 L199.9 239.8 L203.2 240.4 L206.6 241.0 L209.9 241.6 L213.2 242.0 L216.6 242.5 L219.9 242.8 L223.3 243.2 L226.6 243.4 L230.0 243.6 L233.3 243.8 L236.7 243.8 L240.0 243.9 L243.3 243.8 L246.7 243.8 L250.0 243.6 L253.4 243.4 L256.7 243.2 L260.1 242.8 L263.4 242.5 L266.8 242.0 L270.1 241.6 L273.4 241.0 L276.8 240.4 L280.1 239.8 L283.5 239.1 L286.8 238.3 L290.2 237.5 L293.5 236.6 L296.9 235.7 L300.2 234.8 L303.5 233.7 L306.9 232.7 L310.2 231.6 L313.6 230.4 L316.9 229.2 L320.3 227.9 L323.6 226.6 L327.0 225.2 L330.3 223.8 L333.6 222.4 L337.0 220.9 L340.3 219.4 L343.7 217.8 L347.0 216.2 L350.4 214.6 L353.7 212.9 L357.1 211.2 L360.4 209.4 L363.8 207.6 L367.1 205.8 L370.4 204.0 L373.8 202.1 L377.1 200.2 L380.5 198.2 L383.8 196.3 L387.2 194.3 L390.5 192.3 L393.9 190.2 L397.2 188.2 L400.5 186.1 L403.9 184.0 L407.2 181.9 L410.6 179.8 L413.9 177.7 L417.3 175.5 L420.6 173.3 L424.0 171.2 L427.3 169.0 L430.6 166.8 L434.0 164.6 L437.3 162.4 L440.7 160.3"/></g><circle cx="240.0" cy="160.0" r="4.2" fill="#ff9770"/><circle cx="38.9" cy="160.0" r="3.4" fill="#ff9770" opacity=".65"/><circle cx="441.1" cy="160.0" r="3.4" fill="#ff9770" opacity=".65"/><g font-family="Georgia,serif" font-size="12" fill="#5c6775"><text x="248" y="32">ω</text><text x="458" y="176" text-anchor="end">θ</text></g></svg>
+          <div class="figcap">蓝＝来回摆（闭合环），绿＝整圈转，金色虚线＝分界线，两个点＝±π 处的不稳定平衡。第 6 章给它们正式判据。</div>
+        </div>
+      </div>
+    </div>
+  
+  <div class="pfoot">§6.7 钟摆</div>
+</section>
+
+
+  <!-- ========== 06 演示02 钟摆 ========== -->
+  <section class="page" data-title="演示 02 · 钟摆的相图" data-steps="3" data-hook="pend">
+    <div class="page-inner">
+      <div class="split" style="grid-template-columns:1.1fr .9fr">
+        <div class="a demo">
+          <canvas id="cv2" height="380"></canvas>
+          <div class="ctrls">
+            <div class="slider"><span>阻尼 γ</span>
+              <input type="range" id="g2" min="0" max="0.8" step="0.02" value="0"><b id="g2v">0.00</b></div>
+            <button class="btn" id="reset2">重置</button>
+          </div>
+          <div class="readout" id="ro2"></div>
+        </div>
+        <div class="a">
+          <div class="steps" id="st2">
+            <div class="step on">
+              <div class="snum">01 / 03 · 不踩刹车</div>
+              <h3>γ = 0：一圈圈闭合的环</h3>
+              <p>放手之后，轨迹回到原处，永远这么荡下去。<strong>没有起点也没有终点</strong>——能量守恒，每一圈代表一个能级。</p>
+            </div>
+            <div class="step">
+              <div class="snum">02 / 03 · 踩一点刹车</div>
+              <h3>γ = 0.22：环变成螺旋</h3>
+              <p>摩擦一点点吃掉能量，环向内收，最终停在最低点。系统被<strong>吸引</strong>到一个点上——这就是"耗散"。</p>
+            </div>
+            <div class="step">
+              <div class="snum">03 / 03 · 重刹车</div>
+              <h3>γ = 0.75：直接冲进谷底</h3>
+              <p>几乎不振荡，一路滑到最低点。但那条<strong>分界线</strong>始终还在，把"来回摆"和"整圈转"分成两个世界。</p>
+            </div>
+          </div>
+          <div class="sdots" id="sd2"><i class="on"></i><i></i><i></i></div>
+          <div class="readout" style="margin-top:14px">在图上按住拖动 ＝ 换一个初始状态</div>
+        </div>
+      </div>
+    </div>
+  
+  <div class="pfoot">§6.7 钟摆</div>
+</section>
+
+
+  <!-- ========== 07 线性 vs 非线性 ========== -->
+  <section class="page" data-title="线性只是特例">
+    <div class="page-inner">
+      <div class="a kicker">LINEAR IS A SPECIAL CASE</div>
+      <h2 class="a">为什么必须换一套工具</h2>
+      <p class="a p" style="max-width:52em">整套线性数学都建立在一个假设上：两个解加起来还是解。可现实世界几乎从不满足它。</p>
+      <div class="split" style="margin-top:20px;gap:16px">
+        <div class="a card" style="border-color:rgba(98,208,255,.28)">
+          <h4 style="color:#bfe6ff">线性世界</h4>
+          <p>· 叠加原理成立，复杂问题能拆开<br>· 通常只有一个平衡态<br>· 参数一变，行为慢慢变<br>· 能写出解析解<br>· 预测＝比例外推</p>
+        </div>
+        <div class="a card" style="border-color:rgba(232,176,75,.32)">
+          <h4 style="color:#f3d79a">非线性世界</h4>
+          <p>· 叠加失效，两个解相加什么都不是<br>· 可以有多个平衡态并存<br>· 参数过临界点，行为<strong>整体跳变</strong><br>· 常常只能定性理解<br>· 预测＝先看结构，再算数值</p>
+        </div>
+      </div>
+      <p class="a p" style="margin-top:22px;max-width:52em">钟摆是 sin θ 不是 θ；种群长到容量就顶住；激光的增益会饱和；神经元有阈值。<strong>这些系统全都不满足叠加。</strong>所以必须换工具：把"求解"换成"看结构"。</p>
+    </div>
+  
+  <div class="pfoot">§1.2 非线性的重要性</div>
+</section>
+
+
+  <!-- ========== 08 演示03 周期 ========== -->
+  <section class="page" data-title="演示 03 · 小角度近似什么时候开始骗你">
+    <div class="page-inner">
+      <div class="split" style="grid-template-columns:1.15fr .85fr">
+        <div class="a demo">
+          <canvas id="cv3" height="340"></canvas>
+          <div class="ctrls">
+            <div class="slider"><span>初始摆角</span>
+              <input type="range" id="a3" min="5" max="178" step="1" value="20"><b id="a3v">20°</b></div>
+          </div>
+          <div class="readout" id="ro3"></div>
+        </div>
+        <div class="a">
+          <h3 style="font-size:clamp(16px,1.8vw,21px);color:#f3eddf;margin-bottom:12px">近似，只在"小"的时候活着</h3>
+          <p class="p" style="font-size:13.8px">线性近似说：周期与振幅无关，永远是 <em>T</em>₀ = 2π√(<em>L</em>/<em>g</em>)。钟表匠正靠这条吃饭。</p>
+          <p class="p" style="font-size:13.8px">可振幅到 <strong>90°</strong>，真实周期已经长了 <strong>18%</strong>；到 170°，长 144%；再接近 180°，周期<strong>趋向无穷</strong>——摆要荡到正上方，那儿速度是零，需要无限久才肯翻过去。</p>
+          <p class="p" style="font-size:13.8px">非线性的脾气就在这里：<strong>它不在"误差"里，它在"新性质"里</strong>。同一个方程会突然多出一整类从未出现过的现象。</p>
+        </div>
+      </div>
+    </div>
+  
+  <div class="pfoot">§1.2 非线性的重要性</div>
+</section>
+
+
+  <!-- ========== 09 激光 ========== -->
+  <section class="page" data-title="案例 · 激光是怎么突然亮起来的">
+    <div class="page-inner">
+      <div class="a kicker">CASE · 阈值</div>
+      <h2 class="a">一个"突然"的案例：激光</h2>
+      <div class="split" style="margin-top:18px;gap:16px">
+        <div class="a card">
+          <h4>1960 · 梅曼的红宝石激光</h4>
+          <p>泵浦能量低于某个阈值，出来的只是杂乱荧光；一旦越过阈值，突然变成一束高度有序的相干光——<strong>没有任何渐变</strong>。</p>
+        </div>
+        <div class="a card">
+          <h4>1975 · 哈肯：这跟结冰是一类事</h4>
+          <p>阈值处，原本"熄灭"的状态失去稳定性，系统整体跳到"点亮"的状态。用本书的语言：这是一个<strong>跨临界分岔</strong>，第 3 章会逐行算出来。</p>
+        </div>
+      </div>
+      <div class="a pull" style="margin-top:26px">参数扫过一个临界值，结构就整体改换——像水到 100℃ 一定沸腾，不管你用什么锅。</div>
+      <p class="a p">所以后面所有章节都在干同一件事：<b>找出系统的"控制参数"，看清它在临界点上做了什么</b>。这比解出一条具体曲线有用得多。</p>
+    </div>
+  
+  <div class="pfoot">§3.3 激光阈值</div>
+</section>
+
+
+  <!-- ========== 10 补课 ========== -->
+  <section class="page" data-title="10 秒补课 · 三件工具">
+    <div class="page-inner">
+      <div class="a kicker">TOOLKIT · 你勾了「没底」的三样</div>
+      <h2 class="a">10 秒补课</h2>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:22px">
+        <details class="a" open>
+          <summary><span class="tag">微分方程</span>它在说什么</summary>
+          <div class="body">
+            <p><code>dx/dt = f(x)</code> 读作：<b>变化率 = 当前值的某个函数</b>。它不告诉你终点，只告诉你此刻往哪走、多快。</p>
+            <p>平衡点 <code>x*</code> 处看斜率：<b>f′(x*)&lt;0 稳定</b>（谷底），<b>f′(x*)&gt;0 不稳定</b>（山顶）。</p>
+          </div>
+        </details>
+        <details class="a" open>
+          <summary><span class="tag">线性代数</span>特征值＝命运</summary>
+          <div class="body">
+            <p><code>ẋ = Ax</code> 里，特征向量是"只被拉长不被转向"的方向，特征值 λ 是拉长倍数。</p>
+            <p><b>λ&lt;0</b> 自动衰减（被吸住），<b>λ&gt;0</b> 自动放大（被推开）。二维相图的全部类型，就是 λ 的符号组合。</p>
+          </div>
+        </details>
+        <details class="a" open>
+          <summary><span class="tag">复数</span>旋转的另一种写法</summary>
+          <div class="body">
+            <p><code>e^(iθ) = cos θ + i sin θ</code>——指数增长与旋转是同一个运算的两面。</p>
+            <p><code>e^((a+ib)t)</code>：实部 a 管变大变小，虚部 b 管转多快。螺旋、中心、结点，一行公式全包。</p>
+          </div>
+        </details>
+      </div>
+      <p class="a p" style="margin-top:22px;max-width:54em">这三样东西后面每一章都会反复用。<strong>不用现在就会推</strong>，但要认得它们的"长相"：见到负斜率想到稳定，见到负实部想到收敛，见到虚部想到旋转。</p>
+    </div>
+  
+  <div class="pfoot">—</div>
+</section>
+
+
+  <!-- ========== 11 推导1 ========== -->
+  <section class="page" data-title="完整推导 1 · 相轨迹为什么不相交">
+    <div class="page-inner">
+      <div class="a kicker">PROOF 01 · 这页留给做科研的你</div>
+      <h2 class="a">相轨迹为什么永不相交</h2>
+      <details class="a" open style="margin-top:20px">
+        <summary><span class="tag blue">完整推导</span>定理 + 前提 + 边界</summary>
+        <div class="body proofs">
+          <p><b>要证：</b>若两条轨线在某点 <em>p</em> 相交，则它们是同一条曲线（只差时间平移）。</p>
+          <p><b>前提：</b><em>f</em>(<em>x</em>) 连续可微，至少局部 Lipschitz。这个前提后面要单独拎出来，因为它真的会失效。</p>
+          <p><span class="stepnum">1</span>轨迹 A 在 <em>t</em>₁ 经过 <em>p</em>，轨迹 B 在 <em>t</em>₂ 经过 <em>p</em>。两者都是同一初值问题 <em>ẋ</em>=<em>f</em>(<em>x</em>)、<em>x</em>(<em>t</em>ᵢ)=<em>p</em> 的解。</p>
+          <p><span class="stepnum">2</span>由<b>存在唯一性定理</b>（Picard–Lindelöf，第 2.5 节）：<em>f</em> 在 <em>p</em> 邻域内 Lipschitz 连续时，该问题在某个区间内<b>有且仅有一个</b>解。</p>
+          <p><span class="stepnum">3</span>两条解同方程、同初值，故在共同定义域上处处相等。B 无非是 A 沿时间轴平移 <em>t</em>₂−<em>t</em>₁。</p>
+          <p><b>推论：</b>轨迹只会平行、汇合、远离，不会交叉。系统一旦回到旧状态，就必然重复此前的一切——这是"周期解"的几何来源，第 7 章要用。</p>
+          <p><b>边界（科研上必须知道）：</b>唯一性一破，定理作废。<code>ẋ = √x</code> 在 <em>x</em>=0 不满足 Lipschitz，从 0 出发有<b>无穷多解</b>；<code>ẋ = −sgn(x)</code> 会让系统在有限时间内"卡死"。这类非唯一性正是滑模控制、干摩擦、继电器系统的物理来源。</p>
+        </div>
+      </details>
+    </div>
+  
+  <div class="pfoot">§2.5 存在性与唯一性</div>
+</section>
+
+
+  <!-- ========== 12 推导2 ========== -->
+  <section class="page" data-title="完整推导 2 · 摆的周期">
+    <div class="page-inner">
+      <div class="a kicker">PROOF 02 · 能量积分 → 椭圆积分 → 级数</div>
+      <h2 class="a">摆的周期为什么会被振幅拉长</h2>
+      <details class="a" open style="margin-top:18px">
+        <summary><span class="tag blue">完整推导</span>五步，每步给理由</summary>
+        <div class="body proofs">
+          <p><b>出发点．</b>取 <em>g</em>/<em>L</em>=ω₀²，记角位移 θ：</p>
+          <span class="formula">θ̈ + ω₀² sin θ = 0</span>
+          <p><span class="stepnum">1</span><b>造能量．</b>两边乘 θ̇ 再积分（合法理由：乘 θ̇ 后全式成为某函数的全导数，故对任意解成立）：</p>
+          <span class="formula">½ θ̇² + ω₀²(1 − cos θ) = E = const</span>
+          <p>无阻尼时相轨迹被锁在等能线上——这正是演示里那些闭合环，每个环一个能级。</p>
+          <p><span class="stepnum">2</span><b>用能量换时间．</b>从静止角 θ₀ 释放，<em>E</em>=ω₀²(1−cos θ₀)：</p>
+          <span class="formula">θ̇² = 2ω₀²(cos θ − cos θ₀) ⇒ T = 4∫₀^θ₀ dθ / √(2ω₀²(cos θ − cos θ₀))</span>
+          <p><span class="stepnum">3</span><b>半角替换．</b>cos θ − cos θ₀ = 2[sin²(θ₀/2) − sin²(θ/2)]，记 <em>k</em>=sin(θ₀/2)，令 sin φ=sin(θ/2)/<em>k</em>：</p>
+          <span class="formula">T = (4/ω₀) K(k)，　K(k)=∫₀^{π/2} dφ/√(1−k²sin²φ)</span>
+          <p><span class="stepnum">4</span><b>退化自检．</b>振幅趋零时 <em>k</em>→0，K(0)=π/2，得 <em>T</em>→2π/ω₀=2π√(<em>L</em>/<em>g</em>)——线性近似被复现。<b>任何推导都要做这一步</b>：新公式必须能在旧公式的地盘上退化成旧公式。</p>
+          <p><span class="stepnum">5</span><b>展开看趋势．</b>K=(π/2)(1+k²/4+9k⁴/64+…)，代入 k²=θ₀²/4−θ₀⁴/48：</p>
+          <span class="formula">T / T₀ = 1 + θ₀²/16 + 11θ₀⁴/3072 + O(θ₀⁶)</span>
+          <p>二次项系数恒正，所以<b>振幅越大、周期越长</b>。θ₀=90° 时级数给 +15.4%，准确值 +18.0%——级数在中等振幅就吃力，这也是演示里用数值求积而不是展开式的原因。</p>
+          <p><b>科研上的两个提醒．</b>①这个积分<b>没有初等原函数</b>，椭圆积分不可约——"非线性方程给不出初等解"的最小样板。②一旦加上阻尼，能量不再守恒，"周期"这个概念本身就要重新定义（瞬态 vs 极限环），那是第 8 章霍普夫分岔的内容。</p>
+        </div>
+      </details>
+    </div>
+  
+  <div class="pfoot">§6.7 钟摆</div>
+</section>
+
+
+  <!-- ========== 13 洛伦兹故事 ========== -->
+  <section class="page" data-title="确定性不等于可预测">
+    <div class="page-inner">
+      <div class="split rev">
+        <div class="a fig" style="padding:18px">
+          <svg viewBox="0 0 480 320" role="img" aria-label="洛伦兹吸引子与两条分离的轨迹"><path d="M246.2 282.4 L247.3 282.1 L248.7 281.8 L250.4 281.4 L252.5 280.8 L254.9 280.2 L258.0 279.2 L261.6 278.0 L265.9 276.3 L271.0 274.0 L277.2 270.9 L284.4 266.8 L292.8 261.1 L302.5 253.6 L313.4 243.5 L325.2 230.5 L337.5 213.8 L349.3 193.4 L359.2 169.7 L365.4 144.3 L366.2 119.8 L360.7 99.6 L348.9 86.7 L332.4 82.7 L313.5 86.7 L294.4 96.3 L276.9 108.5 L261.8 121.1 L249.2 132.6 L239.1 142.3 L230.9 150.2 L224.4 156.6 L219.2 161.7 L215.0 165.8 L211.6 169.2 L208.8 172.0 L206.5 174.5 L204.5 176.6 L202.7 178.4 L201.0 180.0 L199.5 181.3 L198.0 182.4 L196.5 183.3 L195.0 183.9 L193.5 184.2 L192.1 184.4 L190.6 184.2 L189.1 183.8 L187.7 183.1 L186.4 182.1 L185.1 180.9 L184.0 179.4 L183.0 177.8 L182.2 176.0 L181.7 174.1 L181.4 172.2 L181.4 170.3 L181.6 168.5 L182.1 166.9 L182.9 165.5 L183.8 164.4 L185.0 163.5 L186.3 163.0 L187.6 162.9 L189.1 163.0 L190.5 163.5 L191.9 164.3 L193.2 165.3 L194.4 166.6 L195.5 168.0 L196.4 169.5 L197.1 171.1 L197.7 172.8 L198.1 174.5 L198.2 176.2 L198.2 177.8 L198.1 179.3 L197.7 180.7 L197.2 182.0 L196.4 183.1 L195.6 184.0 L194.6 184.7 L193.5 185.2 L192.3 185.4 L191.0 185.4 L189.6 185.1 L188.2 184.6 L186.8 183.7 L185.5 182.6 L184.3 181.2 L183.2 179.6 L182.2 177.8 L181.5 175.9 L181.0 173.8 L180.7 171.8 L180.8 169.8 L181.1 167.9 L181.7 166.2 L182.6 164.7 L183.7 163.5 L184.9 162.7 L186.3 162.3 L187.8 162.2 L189.4 162.5 L190.9 163.1 L192.4 163.9 L193.7 165.1 L195.0 166.5 L196.1 168.0 L197.0 169.6 L197.8 171.4 L198.3 173.2 L198.7 174.9 L198.8 176.7 L198.8 178.4 L198.5 179.9 L198.1 181.4 L197.5 182.7 L196.8 183.9 L195.8 184.8 L194.7 185.5 L193.5 186.0 L192.2 186.2 L190.9 186.2 L189.4 185.8 L187.9 185.2 L186.5 184.3 L185.1 183.0 L183.8 181.5 L182.6 179.8 L181.6 177.8 L180.9 175.7 L180.4 173.5 L180.2 171.3 L180.2 169.2 L180.6 167.2 L181.3 165.4 L182.3 163.9 L183.5 162.7 L184.9 161.9 L186.4 161.5 L188.0 161.5 L189.7 161.8 L191.3 162.5 L192.9 163.5 L194.3 164.8 L195.6 166.3 L196.7 168.0 L197.7 169.7 L198.4 171.6 L199.0 173.5 L199.3 175.3 L199.4 177.2 L199.4 178.9 L199.1 180.6 L198.6 182.1 L197.9 183.5 L197.1 184.7 L196.1 185.6 L195.0 186.4 L193.7 186.8 L192.3 187.1 L190.8 187.0 L189.3 186.6 L187.7 185.9 L186.2 184.9 L184.7 183.5 L183.3 181.9 L182.0 180.0 L181.0 177.9 L180.2 175.7 L179.7 173.3 L179.5 170.9 L179.7 168.6 L180.1 166.5 L180.9 164.6 L182.0 163.0 L183.3 161.8 L184.8 161.0 L186.5 160.7 L188.2 160.7 L190.0 161.1 L191.7 161.9 L193.3 163.1 L194.8 164.5 L196.2 166.1 L197.4 167.9 L198.3 169.8 L199.1 171.7 L199.7 173.7 L200.0 175.7 L200.1 177.7 L200.0 179.5 L199.7 181.2 L199.2 182.8 L198.4 184.3 L197.5 185.5 L196.5 186.5 L195.2 187.3 L193.9 187.7 L192.4 188.0 L190.8 187.9 L189.2 187.4 L187.5 186.7 L185.9 185.6 L184.3 184.1 L182.8 182.4 L181.5 180.4 L180.4 178.1 L179.6 175.7 L179.0 173.1 L178.9 170.6 L179.0 168.2 L179.5 165.9 L180.4 163.9 L181.6 162.2 L183.0 161.0 L184.7 160.1 L186.5 159.8 L188.3 159.9 L190.2 160.4 L192.0 161.3 L193.8 162.5 L195.4 164.1 L196.8 165.8 L198.0 167.7 L199.0 169.7 L199.8 171.8 L200.4 173.9 L200.7 176.0 L200.8 178.1 L200.7 180.0 L200.3 181.8 L199.8 183.5 L199.0 185.0 L198.1 186.3 L196.9 187.4 L195.6 188.2 L194.2 188.7 L192.6 188.9 L190.9 188.8 L189.2 188.4 L187.4 187.6 L185.7 186.4 L184.0 184.9 L182.4 183.0 L181.0 180.9 L179.8 178.5 L178.9 175.9 L178.3 173.1 L178.1 170.4 L178.3 167.8 L178.9 165.3 L179.8 163.2 L181.1 161.4 L182.6 160.1 L184.4 159.2 L186.3 158.8 L188.3 159.0 L190.3 159.5 L192.3 160.5 L194.1 161.9 L195.8 163.5 L197.4 165.4 L198.6 167.4 L199.7 169.6 L200.5 171.8 L201.1 174.0 L201.5 176.3 L201.6 178.4 L201.4 180.5 L201.1 182.4 L200.5 184.2 L199.7 185.7 L198.7 187.1 L197.5 188.3 L196.1 189.1 L194.6 189.7 L193.0 190.0 L191.2 189.9 L189.3 189.5 L187.5 188.6 L185.6 187.4 L183.8 185.9 L182.1 183.9 L180.5 181.6 L179.2 179.0 L178.2 176.3 L177.6 173.3 L177.4 170.4 L177.5 167.6 L178.1 164.9 L179.1 162.6 L180.4 160.6 L182.1 159.2 L184.0 158.2 L186.1 157.8 L188.2 157.9 L190.4 158.6 L192.5 159.6 L194.5 161.1 L196.3 162.8 L197.9 164.8 L199.3 167.0 L200.4 169.3 L201.3 171.6 L201.9 174.0 L202.3 176.3 L202.4 178.6 L202.3 180.8 L201.9 182.8 L201.3 184.7 L200.5 186.4 L199.5 187.9 L198.2 189.1 L196.8 190.1 L195.2 190.8 L193.5 191.1 L191.6 191.1 L189.7 190.7 L187.7 189.9 L185.7 188.7 L183.7 187.1 L181.8 185.0 L180.2 182.6 L178.7 179.9 L177.6 177.0 L176.9 173.8 L176.5 170.7 L176.6 167.6 L177.2 164.7 L178.2 162.1 L179.6 159.9 L181.4 158.3 L183.4 157.2 L185.6 156.7 L187.9 156.8 L190.2 157.4 L192.5 158.5 L194.6 160.0 L196.6 161.9 L198.3 164.0 L199.8 166.3 L201.1 168.7 L202.0 171.2 L202.7 173.8 L203.2 176.2 L203.3 178.7 L203.2 181.0 L202.9 183.2 L202.3 185.2 L201.5 187.0 L200.4 188.6 L199.2 190.0 L197.7 191.1 L196.1 191.9 L194.3 192.3 L192.3 192.4 L190.3 192.1 L188.1 191.3 L186.0 190.2 L183.9 188.6 L181.8 186.5 L180.0 184.0 L178.3 181.2 L177.0 178.1 L176.1 174.7 L175.6 171.3 L175.6 167.9 L176.1 164.7 L177.1 161.8 L178.6 159.4 L180.4 157.5 L182.5 156.2 L184.9 155.6 L187.3 155.6 L189.8 156.1 L192.3 157.2 L194.6 158.8 L196.7 160.7 L198.6 162.9 L200.3 165.3 L201.7 167.9 L202.8 170.6 L203.6 173.2 L204.1 175.9 L204.3 178.5 L204.3 180.9 L204.0 183.3 L203.4 185.5 L202.6 187.5 L201.6 189.2 L200.4 190.8 L198.9 192.0 L197.2 193.0 L195.3 193.6 L193.3 193.8 L191.2 193.6 L188.9 193.0 L186.6 192.0 L184.3 190.4 L182.1 188.4 L180.0 185.9 L178.2 183.0 L176.6 179.7 L175.4 176.2 L174.7 172.5 L174.6 168.8 L174.9 165.2 L175.8 162.0 L177.2 159.2 L179.0 156.9 L181.3 155.3 L183.8 154.4 L186.4 154.2 L189.1 154.6 L191.8 155.6 L194.3 157.2 L196.7 159.1 L198.8 161.4 L200.6 164.0 L202.2 166.7 L203.4 169.5 L204.4 172.3 L205.0 175.2 L205.4 177.9 L205.4 180.6 L205.2 183.1 L204.7 185.5 L204.0 187.7 L203.0 189.7 L201.8 191.4 L200.3 192.9 L198.7 194.0 L196.8 194.8 L194.7 195.3 L192.5 195.3 L190.2 194.9 L187.7 194.0 L185.2 192.7 L182.8 190.8 L180.5 188.3 L178.3 185.4 L176.4 182.1 L175.0 178.4 L173.9 174.5 L173.4 170.4 L173.5 166.4 L174.2 162.7 L175.5 159.4 L177.3 156.7 L179.5 154.6 L182.1 153.3 L184.9 152.7 L187.9 152.9 L190.8 153.8 L193.6 155.2 L196.2 157.2 L198.6 159.5 L200.7 162.1 L202.5 165.0 L204.0 167.9 L205.1 170.9 L205.9 173.9 L206.5 176.9 L206.7 179.8 L206.6 182.5 L206.2 185.1 L205.6 187.6 L204.7 189.8 L203.6 191.8 L202.2 193.5 L200.6 194.9 L198.7 196.0 L196.6 196.7 L194.4 197.1 L191.9 197.0 L189.4 196.4 L186.8 195.3 L184.1 193.6 L181.5 191.4 L179.0 188.6 L176.8 185.3 L174.9 181.6 L173.4 177.5 L172.5 173.1 L172.1 168.7 L172.5 164.4 L173.5 160.5 L175.1 157.1 L177.2 154.4 L179.8 152.4 L182.8 151.3 L185.9 151.1 L189.1 151.6 L192.2 152.8 L195.2 154.6 L197.9 156.9 L200.3 159.6 L202.5 162.5 L204.2 165.6 L205.7 168.8 L206.8 172.0 L207.5 175.2 L207.9 178.3 L208.1 181.3 L207.9 184.2 L207.4 186.9 L206.7 189.4 L205.7 191.7 L204.4 193.7 L202.9 195.5 L201.1 196.9 L199.1 198.0 L196.9 198.8 L194.5 199.1 L191.8 198.9 L189.1 198.2 L186.2 196.9 L183.4 195.1 L180.6 192.6 L177.9 189.6 L175.5 185.9 L173.5 181.8 L171.9 177.3 L171.0 172.5 L170.7 167.7 L171.2 163.0 L172.4 158.8 L174.3 155.2 L176.7 152.3 L179.7 150.4 L183.0 149.4 L186.4 149.3 L189.9 150.1 L193.2 151.6 L196.4 153.7 L199.3 156.3 L201.8 159.2 L204.0 162.5 L205.8 165.8 L207.3 169.2 L208.4 172.6 L209.1 176.0 L209.5 179.3 L209.6 182.5 L209.4 185.5 L208.9 188.3 L208.1 190.9 L207.1 193.3 L205.7 195.5 L204.1 197.4 L202.3 198.9 L200.2 200.1 L197.8 200.9 L195.2 201.3 L192.5 201.2 L189.5 200.5 L186.5 199.3 L183.3 197.4 L180.3 194.8 L177.3 191.6 L174.7 187.7 L172.4 183.2 L170.6 178.3 L169.5 173.1 L169.1 167.8 L169.5 162.6 L170.8 157.9 L172.8 153.8 L175.5 150.6 L178.7 148.4 L182.3 147.3 L186.1 147.2 L189.9 148.0 L193.5 149.7 L197.0 152.0 L200.1 154.8 L202.9 158.0 L205.3 161.5 L207.2 165.1 L208.8 168.8 L210.0 172.4 L210.8 176.0 L211.3 179.5 L211.5 182.9 L211.3 186.1 L210.8 189.1 L210.1 191.9 L209.0 194.5 L207.7 196.9 L206.1 199.0 L204.2 200.7 L202.1 202.2 L199.7 203.2 L197.0 203.8 L194.2 203.9 L191.1 203.5 L187.8 202.5 L184.5 200.7 L181.1 198.3 L177.8 195.2 L174.7 191.2 L171.9 186.6 L169.7 181.4 L168.1 175.7 L167.3 169.8 L167.4 164.0 L168.4 158.5 L170.3 153.7 L173.0 149.7 L176.4 146.9 L180.2 145.2 L184.4 144.7 L188.6 145.3 L192.7 146.9 L196.5 149.2 L200.1 152.2 L203.2 155.5 L206.0 159.2 L208.2 163.1 L210.1 167.0 L211.5 170.9 L212.6 174.8 L213.2 178.5 L213.5 182.2 L213.5 185.6 L213.2 188.9 L212.6 192.0 L211.7 194.9 L210.5 197.6 L209.0 200.0 L207.3 202.1 L205.2 203.9 L202.9 205.3 L200.3 206.4 L197.4 207.0 L194.3 207.0 L190.9 206.5 L187.4 205.3 L183.7 203.4 L180.0 200.7 L176.4 197.1 L173.0 192.7 L169.9 187.6 L167.5 181.7 L165.8 175.3 L165.0 168.7 L165.3 162.2 L166.6 156.1 L168.9 150.8 L172.1 146.6 L176.0 143.7 L180.4 142.2 L185.0 141.9 L189.7 142.9 L194.2 144.9 L198.4 147.7 L202.2 151.1 L205.5 154.9 L208.3 159.0 L210.7 163.2 L212.6 167.4 L214.1 171.6 L215.1 175.7 L215.8 179.7 L216.1 183.5 L216.1 187.2 L215.7 190.6 L215.1 193.9 L214.2 197.0 L213.0 199.8 L211.6 202.4 L209.8 204.7 L207.8 206.7 L205.4 208.4 L202.8 209.7 L199.8 210.5 L196.6 210.9 L193.1 210.6 L189.3 209.7 L185.3 208.1 L181.2 205.6 L177.1 202.1 L173.1 197.8 L169.5 192.4 L166.4 186.2 L164.0 179.3 L162.6 171.9 L162.3 164.4 L163.3 157.2 L165.4 150.7 L168.7 145.4 L172.8 141.5 L177.6 139.2 L182.8 138.4 L188.1 139.1 L193.2 141.0 L198.0 143.9 L202.4 147.5 L206.2 151.6 L209.5 156.0 L212.3 160.6 L214.5 165.2 L216.3 169.7 L217.6 174.1 L218.5 178.4 L219.1 182.6 L219.3 186.6 L219.2 190.3 L218.7 193.9 L218.1 197.3 L217.1 200.5 L215.9 203.4 L214.4 206.2 L212.6 208.6 L210.5 210.8 L208.1 212.6 L205.3 214.1 L202.3 215.2 L198.9 215.7 L195.2 215.7 L191.1 215.0 L186.8 213.5 L182.3 211.2 L177.7 207.8 L173.1 203.4 L168.8 197.8 L164.9 191.1 L161.8 183.5 L159.7 175.1 L158.9 166.4 L159.5 157.9 L161.5 150.1 L164.9 143.4 L169.4 138.4 L174.8 135.3 L180.7 134.0 L186.8 134.5 L192.7 136.5 L198.3 139.7 L203.3 143.7 L207.7 148.2 L211.5 153.1 L214.7 158.1 L217.3 163.1 L219.4 168.0 L221.0 172.9 L222.1 177.5 L222.9 182.0 L223.3 186.2 L223.4 190.3 L223.2 194.2 L222.8 197.9 L222.1 201.4 L221.2 204.7 L220.0 207.8 L218.6 210.6 L216.9 213.3 L214.9 215.7 L212.6 217.8 L209.9 219.6 L207.0 221.0 L203.6 222.0 L199.8 222.5 L195.7 222.4 L191.2 221.6 L186.3 219.9 L181.1 217.2 L175.8 213.4 L170.5 208.2 L165.5 201.7 L161.0 193.8 L157.3 184.6 L155.0 174.6 L154.2 164.2 L155.1 154.1 L157.9 144.9 L162.3 137.3 L168.0 131.9 L174.7 128.8 L181.8 128.0 L189.0 129.3 L195.8 132.2 L202.0 136.4 L207.6 141.3 L212.4 146.7 L216.5 152.3 L219.8 157.9 L222.6 163.4 L224.7 168.7 L226.4 173.9 L227.6 178.8 L228.5 183.5 L229.1 188.0 L229.3 192.2 L229.4 196.3 L229.2 200.2 L228.9 203.8 L228.3 207.3 L227.6 210.7 L226.6 213.8 L225.5 216.8 L224.2 219.6 L222.6 222.3 L220.8 224.7 L218.7 227.0 L216.2 229.0 L213.4 230.7 L210.2 232.1 L206.6 233.1 L202.5 233.7 L197.9 233.6 L192.8 232.8 L187.2 231.0 L181.1 228.2 L174.8 223.9 L168.3 218.1 L161.9 210.5 L156.1 201.1 L151.2 189.9 L147.9 177.3 L146.6 164.0 L147.7 150.8 L151.2 138.8 L156.9 129.1 L164.4 122.4 L173.0 118.9 L182.1 118.5 L191.0 120.7 L199.4 124.9 L206.9 130.4 L213.4 136.7 L219.0 143.2 L223.6 149.7 L227.4 156.1 L230.4 162.2 L232.9 168.0 L234.8 173.5 L236.3 178.7 L237.5 183.6 L238.5 188.2 L239.2 192.6 L239.8 196.7 L240.3 200.6 L240.7 204.3 L241.1 207.9 L241.4 211.2 L241.7 214.4 L242.0 217.4 L242.3 220.3 L242.6 223.1 L243.0 225.7 L243.4 228.2 L243.8 230.5 L244.3 232.8 L244.9 234.9 L245.5 236.9 L246.3 238.8 L247.2 240.5 L248.3 242.1 L249.5 243.6 L250.9 244.9 L252.6 246.0 L254.5 247.0 L256.8 247.7 L259.5 248.1 L262.6 248.2 L266.2 247.9 L270.4 247.1 L275.2 245.6 L280.8 243.2 L287.2 239.9 L294.4 235.2 L302.3 228.9 L311.0 220.8 L320.0 210.4 L328.9 197.7 L337.2 182.7 L343.8 165.9 L347.9 148.4 L348.6 131.7 L345.2 117.5 L337.9 107.6 L327.3 102.9 L314.7 103.3 L301.2 107.9 L288.1 115.2 L276.1 123.9 L265.6 132.8 L256.8 141.2 L249.5 149.0 L243.5 155.8 L238.6 161.9 L234.7 167.4 L231.5 172.3 L228.8 176.8 L226.5 181.0 L224.6 184.9 L222.8 188.6 L221.1 192.0 L219.5 195.3 L217.8 198.3 L216.0 201.2 L214.0 203.8 L211.9 206.1 L209.6 208.2 L207.1 209.9 L204.3 211.3 L201.2 212.2 L197.8 212.7 L194.2 212.5 L190.2 211.7 L186.1 210.2 L181.8 207.8 L177.5 204.4 L173.3 200.0 L169.3 194.6 L165.9 188.3 L163.3 181.1 L161.6 173.3 L161.0 165.3 L161.8 157.6 L163.8 150.6 L167.1 144.8 L171.4 140.4 L176.4 137.7 L181.8 136.7 L187.4 137.3 L192.8 139.2 L197.9 142.1 L202.6 145.9 L206.7 150.1 L210.2 154.7 L213.1 159.4 L215.5 164.2 L217.4 168.9 L218.9 173.5 L219.9 177.9 L220.5 182.2 L220.8 186.3 L220.8 190.2 L220.5 194.0 L219.9 197.5 L219.1 200.8 L217.9 203.9 L216.6 206.8 L214.9 209.4 L212.9 211.8 L210.7 213.8 L208.1 215.6 L205.2 217.0 L201.9 217.9 L198.3 218.3 L194.3 218.1 L190.0 217.2 L185.4 215.4 L180.6 212.7 L175.8 208.8 L171.0 203.8 L166.5 197.6 L162.5 190.2 L159.5 181.8 L157.6 172.7 L157.2 163.3 L158.3 154.3 L160.9 146.3 L165.0 139.7 L170.2 135.0 L176.3 132.4 L182.7 131.8 L189.1 133.0 L195.3 135.6 L201.0 139.4 L206.1 143.9 L210.5 148.8 L214.2 154.0 L217.3 159.3 L219.8 164.5 L221.8 169.5 L223.3 174.5 L224.4 179.2 L225.1 183.7 L225.5 188.0 L225.6 192.1 L225.4 196.0 L225.0 199.7 L224.4 203.3 L223.5 206.6 L222.4 209.8 L221.1 212.7 L219.5 215.4 L217.6 218.0 L215.5 220.2 L213.0 222.2 L210.2 223.9 L207.0 225.2 L203.4 226.1 L199.3 226.4 L194.9 226.1 L190.0 225.0 L184.7 222.9 L179.1 219.7 L173.4 215.3 L167.7 209.4 L162.4 201.9 L157.7 193.0 L154.1 182.7 L152.0 171.6 L151.7 160.2 L153.4 149.3 L157.0 139.7 L162.4 132.2 L169.2 127.2 L176.7 124.9 L184.5 125.0 L192.2 127.3 L199.4 131.1 L205.8 136.0 L211.4 141.6 L216.2 147.5 L220.2 153.4 L223.5 159.2 L226.1 164.9 L228.2 170.4 L229.8 175.6 L231.0 180.5 L231.9 185.3 L232.5 189.7 L232.8 194.0 L233.0 198.1 L233.0 201.9 L232.8 205.6 L232.5 209.1 L232.1 212.5 L231.5 215.7 L230.7 218.7 L229.9 221.6 L228.8 224.4 L227.6 227.0 L226.2 229.5 L224.5 231.8 L222.6 234.0 L220.4 236.0 L217.8 237.8 L214.9 239.3 L211.5 240.6 L207.6 241.4 L203.2 241.8 L198.2 241.6 L192.6 240.6 L186.4 238.5 L179.7 235.2 L172.5 230.4 L165.2 223.7 L157.9 214.9 L151.3 203.9 L145.9 190.8 L142.3 175.9 L141.2 160.3 L143.0 145.0 L147.8 131.5 L155.1 121.0 L164.4 114.2 L174.7 111.5 L185.2 112.3 L195.3 116.0 L204.5 121.6 L212.6 128.3 L219.5 135.5 L225.2 142.7 L229.9 149.8 L233.7 156.4 L236.8 162.7 L239.3 168.6 L241.4 174.1 L243.0 179.2 L244.4 184.0 L245.7 188.4 L246.7 192.6 L247.7 196.5 L248.7 200.1 L249.7 203.5 L250.8 206.7 L251.9 209.7 L253.2 212.4 L254.6 214.9 L256.2 217.1 L258.0 219.1 L260.0 220.8 L262.3 222.2 L265.0 223.3 L268.0 223.9 L271.5 224.0 L275.4 223.6 L279.8 222.5 L284.7 220.7 L290.1 217.8 L296.0 213.9 L302.2 208.7 L308.8 202.1 L315.3 194.1 L321.5 184.6 L326.9 173.8 L331.0 162.3 L333.3 150.6 L333.4 139.7 L331.1 130.4 L326.3 123.6 L319.5 119.9 L311.2 119.1 L302.2 121.1 L293.0 125.2 L284.3 130.6 L276.3 136.8 L269.2 143.2 L263.2 149.5 L258.2 155.5 L254.0 161.2 L250.6 166.6 L247.9 171.6 L245.7 176.3 L244.0 180.8 L242.6 185.1 L241.5 189.2 L240.7 193.2 L240.0 197.0 L239.4 200.6 L238.9 204.2 L238.5 207.6 L238.2 210.9 L237.8 214.0 L237.5 217.1 L237.1 220.0 L236.7 222.8 L236.3 225.6 L235.8 228.2 L235.2 230.7 L234.6 233.1 L233.9 235.5 L233.1 237.7 L232.1 239.9 L231.0 241.9 L229.7 243.9 L228.2 245.8 L226.5 247.5 L224.4 249.2 L222.1 250.7 L219.3 252.0 L216.1 253.2 L212.4 254.0 L208.0 254.5 L203.1 254.5 L197.4 253.8 L190.9 252.3 L183.6 249.5 L175.7 245.2 L167.2 239.0 L158.4 230.4 L149.8 219.0 L142.2 204.8 L136.3 187.8 L133.2 168.8 L133.5 149.4 L137.6 131.2 L145.5 116.3 L156.2 106.1 L168.6 101.2 L181.6 101.3 L194.1 105.2 L205.4 111.7 L215.3 119.6 L223.6 128.0 L230.5 136.3 L236.1 144.1 L240.7 151.4 L244.4 158.0 L247.4 164.1 L249.9 169.7 L252.1 174.7 L253.9 179.3 L255.6 183.5 L257.2 187.3 L258.8 190.8 L260.4 193.9 L262.1 196.7 L264.0 199.1 L266.0 201.2 L268.3 202.9 L270.8 204.2 L273.5 205.0 L276.6 205.3 L279.9 205.1 L283.6 204.3 L287.6 202.8 L291.9 200.5 L296.4 197.3 L301.0 193.3 L305.6 188.3 L310.0 182.5 L314.0 175.8 L317.4 168.6 L319.8 161.0 L321.0 153.6 L320.8 146.8 L319.2 141.0 L316.1 136.6 L311.9 133.8 L306.7 132.9 L300.9 133.5 L294.9 135.6 L288.9 138.7 L283.2 142.6 L278.1 147.0 L273.5 151.6 L269.5 156.2 L266.1 160.8 L263.4 165.3 L261.2 169.6 L259.5 173.8 L258.2 177.8 L257.4 181.6 L256.9 185.2 L256.7 188.7 L256.8 192.0 L257.1 195.1 L257.7 198.0 L258.6 200.8 L259.7 203.3 L261.1 205.5 L262.7 207.5 L264.6 209.3 L266.9 210.7 L269.4 211.7 L272.3 212.3 L275.6 212.4 L279.2 211.9 L283.3 210.8 L287.7 208.9 L292.5 206.2 L297.6 202.5 L302.8 197.7 L308.2 191.8 L313.3 184.9 L317.9 176.9 L321.8 168.3 L324.5 159.3 L325.7 150.4 L325.2 142.4 L322.9 135.7 L318.9 130.9 L313.5 128.3 L307.0 127.8 L300.0 129.3 L292.8 132.3 L285.9 136.5 L279.5 141.3 L273.8 146.5 L268.8 151.8 L264.5 157.0 L261.0 162.0 L258.1 166.8 L255.8 171.5 L254.1 175.9 L252.7 180.1 L251.8 184.1 L251.1 188.0 L250.8 191.7 L250.7 195.2 L250.8 198.6 L251.1 201.8 L251.6 204.8 L252.3 207.7 L253.2 210.4 L254.3 212.9 L255.6 215.3 L257.1 217.3 L258.9 219.2 L261.0 220.8 L263.4 222.0 L266.1 222.9 L269.2 223.4 L272.7 223.4 L276.7 222.8 L281.2 221.5 L286.2 219.4 L291.8 216.3 L297.7 212.0 L304.0 206.5 L310.5 199.5 L316.9 191.1 L322.8 181.4 L327.9 170.5 L331.5 159.0 L333.2 147.6 L332.6 137.2 L329.6 128.6 L324.3 122.8 L317.1 119.9 L308.6 119.9 L299.6 122.5 L290.6 126.9 L282.2 132.5 L274.5 138.7 L267.8 145.1 L262.1 151.3 L257.3 157.2 L253.4 162.7 L250.2 168.0 L247.7 172.9 L245.7 177.6 L244.1 182.0 L242.8 186.2 L241.8 190.3 L241.0 194.2 L240.4 197.9 L239.9 201.6 L239.5 205.0 L239.2 208.4 L238.9 211.7 L238.6 214.8 L238.3 217.8 L238.1 220.7 L237.8 223.5 L237.5 226.2 L237.2 228.7 L236.8 231.2 L236.3 233.6 L235.8 235.9 L235.3 238.1 L234.6 240.3 L233.9 242.3 L233.0 244.3 L231.9 246.2 L230.7 248.0 L229.3 249.7 L227.6 251.4 L225.7 252.9 L223.4 254.3 L220.8 255.6 L217.7 256.7 L214.1 257.6 L209.9 258.1 L205.0 258.2 L199.4 257.7 L193.0 256.3 L185.8 253.9 L177.8 250.0 L169.1 244.2 L160.0 236.0 L150.9 225.0 L142.5 211.0 L135.6 193.9 L131.4 174.3 L130.7 153.7 L134.1 133.9 L141.5 117.2 L152.2 105.2 L165.1 98.8 L178.8 97.9 L192.1 101.4 L204.2 107.9 L214.8 116.1 L223.8 124.8 L231.2 133.4 L237.2 141.5 L242.1 149.0 L246.1 155.9 L249.3 162.0 L252.0 167.6 L254.3 172.7 L256.3 177.2 L258.1 181.3 L259.8 185.1 L261.5 188.4 L263.2 191.4 L265.0 194.0 L267.0 196.2 L269.1 198.1 L271.5 199.5 L274.1 200.5 L276.9 201.0 L280.0 201.0 L283.4 200.5 L287.1 199.2 L291.0 197.3 L295.0 194.6 L299.2 191.2 L303.4 186.9 L307.4 181.8 L311.1 176.0 L314.2 169.7 L316.5 163.1 L317.8 156.5 L318.0 150.3 L316.9 144.9 L314.6 140.6 L311.2 137.7 L306.9 136.3 L301.9 136.3 L296.7 137.7 L291.3 140.1 L286.1 143.3 L281.3 147.0 L276.9 151.1 L273.1 155.3 L269.8 159.6 L267.1 163.8 L264.8 167.9 L263.1 171.8 L261.8 175.6 L261.0 179.3 L260.4 182.8 L260.3 186.1 L260.4 189.2 L260.8 192.2 L261.5 194.9 L262.5 197.4 L263.7 199.7 L265.2 201.7 L267.0 203.5 L269.1 204.8 L271.5 205.9 L274.3 206.5 L277.3 206.6 L280.7 206.1 L284.5 205.1 L288.6 203.3 L292.9 200.8 L297.5 197.3 L302.2 193.0 L306.9 187.7 L311.3 181.5 L315.3 174.5 L318.5 167.0 L320.7 159.3 L321.6 151.8 L321.1 145.0 L319.1 139.3 L315.7 135.2 L311.1 132.8 L305.6 132.3 L299.6 133.3 L293.4 135.7 L287.4 139.2 L281.7 143.3 L276.6 147.8 L272.0 152.5 L268.2 157.3 L264.9 161.9 L262.3 166.4 L260.2 170.7 L258.5 174.9 L257.4 178.8 L256.6 182.7 L256.1 186.3 L255.9 189.8 L256.1 193.1 L256.5 196.2 L257.1 199.1 L258.0 201.8 L259.1 204.3 L260.5 206.6 L262.1 208.6 L264.0 210.4 L266.3 211.8 L268.8 212.8 L271.7 213.5 L275.0 213.6 L278.6 213.2 L282.7 212.1 L287.2 210.2 L292.0 207.5 L297.2 203.8 L302.6 199.1 L308.0 193.2 L313.3 186.1 L318.2 178.1 L322.2 169.2 L325.1 159.9 L326.5 150.8 L326.1 142.4 L323.9 135.4 L319.9 130.3 L314.4 127.5 L307.8 126.9 L300.6 128.3 L293.2 131.4 L286.1 135.6 L279.5 140.6 L273.6 145.9 L268.4 151.3 L264.0 156.6 L260.4 161.7 L257.5 166.6 L255.1 171.3 L253.3 175.7 L251.9 180.0 L250.9 184.1 L250.2 188.0 L249.8 191.7 L249.6 195.3 L249.6 198.7 L249.9 202.0 L250.3 205.1 L250.9 208.1 L251.6 210.9 L252.6 213.5 L253.7 215.9 L255.0 218.2 L256.6 220.2 L258.4 221.9 L260.5 223.4 L263.0 224.6 L265.7 225.5 L268.9 225.9 L272.6 225.7 L276.7 225.0 L281.3 223.6 L286.5 221.4 L292.2 218.1 L298.3 213.6 L304.9 207.8 L311.6 200.5 L318.2 191.6 L324.4 181.3 L329.6 169.9 L333.2 157.8 L334.8 145.9 L333.9 135.1 L330.5 126.4 L324.7 120.6 L316.9 118.0 L308.0 118.5 L298.5 121.5 L289.2 126.4 L280.5 132.4 L272.6 138.9 L265.9 145.5 L260.1 151.8 L255.3 157.8 L251.4 163.4 L248.3 168.7 L245.7 173.6 L243.7 178.3 L242.1 182.7 L240.8 186.9 L239.7 191.0 L238.9 194.9 L238.2 198.6 L237.5 202.2 L237.0 205.7 L236.4 209.1 L235.9 212.3 L235.3 215.4 L234.8 218.5 L234.1 221.3 L233.4 224.1 L232.6 226.8 L231.7 229.4 L230.6 231.8 L229.4 234.2 L228.1 236.4 L226.4 238.5 L224.6 240.5 L222.4 242.4 L219.9 244.0 L217.1 245.5 L213.7 246.7 L209.9 247.6 L205.5 248.0 L200.5 247.9 L194.8 247.0 L188.4 245.2 L181.4 242.2 L173.7 237.5 L165.8 231.0 L157.7 222.2 L150.2 210.8 L143.7 197.0 L139.1 181.0 L137.1 163.6 L138.4 146.3 L143.0 130.6 L150.7 118.1 L160.7 110.0 L172.1 106.4 L183.9 107.0 L195.1 110.8 L205.3 116.9 L214.2 124.2 L221.7 132.0 L228.0 139.8 L233.1 147.2 L237.3 154.2 L240.6 160.6 L243.4 166.6 L245.7 172.2 L247.6 177.2 L249.2 182.0 L250.7 186.3 L252.0 190.3 L253.3 194.0 L254.7 197.5 L256.1 200.6 L257.6 203.4 L259.2 206.0 L261.1 208.2 L263.2 210.2 L265.5 211.7 L268.1 212.9 L271.0 213.7 L274.3 213.9 L278.0 213.6 L282.0 212.6 L286.5 210.9 L291.4 208.3 L296.6 204.7 L302.0 200.0 L307.5 194.2 L312.9 187.2 L317.9 179.2 L322.1 170.3 L325.2 161.0 L326.8 151.6 L326.6 143.0 L324.6 135.8 L320.7 130.4 L315.3 127.3 L308.7 126.4 L301.4 127.7 L293.9 130.7 L286.7 134.9 L279.9 139.9 L273.9 145.2 L268.6 150.6 L264.1 156.0 L260.4 161.2 L257.4 166.1 L254.9 170.8 L253.0 175.3 L251.6 179.6 L250.5 183.8 L249.8 187.7 L249.3 191.5 L249.1 195.1 L249.1 198.6 L249.3 201.9 L249.6 205.0 L250.1 208.0 L250.8 210.9 L251.7 213.5 L252.7 216.0 L254.0 218.3 L255.4 220.4 L257.1 222.3 L259.1 223.9 L261.4 225.2 L264.0 226.2 L267.0 226.8 L270.4 227.0 L274.3 226.6 L278.6 225.5 L283.6 223.7 L289.1 220.9 L295.1 217.0 L301.5 211.9 L308.3 205.2 L315.1 197.1 L321.7 187.3 L327.6 176.2 L332.2 164.1 L335.0 151.7 L335.4 140.0 L333.3 129.9 L328.5 122.4 L321.5 118.1 L312.9 117.1 L303.4 119.0 L293.7 123.2 L284.5 128.9 L276.0 135.3 L268.6 142.0 L262.3 148.6 L257.0 154.8 L252.6 160.7 L249.0 166.1 L246.2 171.2 L243.9 176.0 L242.0 180.6 L240.5 184.9 L239.3 189.0 L238.3 193.0 L237.5 196.8 L236.8 200.5 L236.1 204.1 L235.5 207.5 L234.8 210.8 L234.2 214.0 L233.5 217.0 L232.7 220.0 L231.9 222.8 L230.9 225.5 L229.8 228.1 L228.6 230.6 L227.1 232.9 L225.5 235.1 L223.5 237.2 L221.3 239.1 L218.8 240.9 L215.8 242.4 L212.5 243.6 L208.6 244.4 L204.1 244.8 L199.1 244.6 L193.4 243.6 L187.1 241.7 L180.2 238.4 L172.8 233.6 L165.1 226.9 L157.5 218.0 L150.4 206.7 L144.6 193.1 L140.6 177.6 L139.2 161.1 L140.9 144.9 L145.7 130.5 L153.4 119.2 L163.1 111.9 L173.9 109.0 L185.0 109.8 L195.7 113.7 L205.3 119.6 L213.7 126.6 L220.8 134.1 L226.8 141.6 L231.6 148.8 L235.6 155.6 L238.8 162.0 L241.4 167.9 L243.5 173.4 L245.3 178.5 L246.8 183.2 L248.1 187.6 L249.4 191.7 L250.5 195.5 L251.7 199.1 L252.9 202.3 L254.2 205.4 L255.6 208.1 L257.2 210.6 L258.9 212.8 L260.9 214.8 L263.1 216.4 L265.7 217.6 L268.6 218.4 L271.8 218.8 L275.5 218.6 L279.6 217.8 L284.1 216.3 L289.1 213.9 L294.5 210.4 L300.3 205.9 L306.3 200.1 L312.3 193.0 L318.0 184.6 L323.1 175.1 L327.1 164.8 L329.6 154.3 L330.2 144.3 L328.7 135.5 L325.0 128.7 L319.4 124.4 L312.4 122.8 L304.4 123.7 L296.1 126.7 L288.0 131.1 L280.4 136.5 L273.6 142.3 L267.7 148.2 L262.6 154.0 L258.4 159.5 L255.0 164.8 L252.2 169.8 L250.0 174.5 L248.3 179.0 L247.0 183.2 L246.0 187.3 L245.3 191.3 L244.8 195.1 L244.5 198.7 L244.3 202.2 L244.3 205.6 L244.3 208.8 L244.5 211.9 L244.8 214.9 L245.1 217.7 L245.6 220.4 L246.1 223.0 L246.8 225.4 L247.5 227.7 L248.4 229.8 L249.5 231.8 L250.7 233.7 L252.2 235.3 L253.8 236.8 L255.8 238.1 L258.0 239.1 L260.6 239.8 L263.6 240.1 L267.1 240.1 L271.2 239.5 L275.8 238.3 L281.1 236.3 L287.0 233.3 L293.7 229.1 L301.1 223.4 L309.0 216.0 L317.2 206.7 L325.3 195.4 L332.8 182.1 L338.9 167.2 L342.8 151.7 L343.8 136.7 L341.4 123.7 L335.6 114.2 L326.8 108.9 L315.9 108.1 L303.9 111.1 L292.0 116.9 L280.9 124.3 L270.9 132.3 L262.4 140.3 L255.2 147.7 L249.3 154.5 L244.4 160.7 L240.5 166.4 L237.3 171.5 L234.7 176.3 L232.5 180.7 L230.7 184.9 L229.1 188.9 L227.6 192.7 L226.2 196.3 L224.8 199.7 L223.4 202.9 L221.8 206.0 L220.2 208.9 L218.4 211.6 L216.3 214.1 L214.0 216.3 L211.5 218.3 L208.6 219.9 L205.4 221.1 L201.8 221.9 L197.8 222.1 L193.5 221.6 L188.8 220.4 L183.8 218.2 L178.6 215.0 L173.3 210.5 L168.1 204.7 L163.3 197.6 L159.3 189.1 L156.3 179.6 L154.7 169.5 L154.7 159.2 L156.6 149.5 L160.1 141.2 L165.2 134.7 L171.4 130.4 L178.2 128.5 L185.3 128.8 L192.3 130.9 L198.8 134.4 L204.7 139.0 L209.8 144.1 L214.2 149.6 L217.9 155.1 L220.9 160.7 L223.4 166.1 L225.3 171.3 L226.7 176.3 L227.7 181.1 L228.4 185.7 L228.8 190.0 L229.0 194.2 L228.9 198.2 L228.6 201.9 L228.1 205.5 L227.4 208.9 L226.6 212.1 L225.5 215.2 L224.2 218.1 L222.7 220.8 L220.9 223.3 L218.9 225.6 L216.5 227.7 L213.8 229.5 L210.7 231.0 L207.2 232.1 L203.3 232.7 L198.8 232.8 L193.8 232.2 L188.4 230.7 L182.5 228.1 L176.3 224.2 L169.8 218.8 L163.5 211.7 L157.6 202.7 L152.6 192.1 L149.0 179.9 L147.3 166.9 L147.8 153.8 L150.7 141.8 L155.8 131.7 L162.9 124.3 L171.2 120.2 L180.0 119.1 L188.9 120.7 L197.3 124.4 L204.9 129.6 L211.6 135.6 L217.3 142.0 L222.1 148.5 L226.0 154.8 L229.2 161.0 L231.7 166.8 L233.8 172.4 L235.4 177.6 L236.6 182.5 L237.6 187.2 L238.3 191.6 L238.9 195.8 L239.4 199.8 L239.8 203.6 L240.0 207.2 L240.3 210.6 L240.5 213.8 L240.7 216.9 L240.8 219.9 L241.0 222.7 L241.2 225.4 L241.3 227.9 L241.5 230.4 L241.7 232.7 L242.0 235.0 L242.3 237.1 L242.6 239.1 L243.0 241.0 L243.4 242.8 L243.9 244.6 L244.5 246.2 L245.2 247.7 L246.0 249.1 L246.9 250.4 L248.0 251.6 L249.3 252.7 L250.9 253.6 L252.7 254.3 L254.8 254.9 L257.3 255.2 L260.2 255.2 L263.6 254.9 L267.6 254.1 L272.3 252.7 L277.7 250.5 L284.0 247.4 L291.1 243.1 L299.2 237.2 L308.1 229.3 L317.6 219.3 L327.4 206.6 L336.8 191.3 L344.9 173.7 L350.6 154.7 L352.9 135.7 L350.8 118.9 L344.2 106.3 L333.6 99.3 L320.2 98.3 L305.6 102.3 L291.1 109.9 L277.7 119.2 L266.0 128.9 L256.1 138.1 L248.0 146.4 L241.3 153.6 L235.9 160.0 L231.6 165.5 L228.0 170.4 L225.1 174.8 L222.6 178.9 L220.5 182.6 L218.5 186.0 L216.7 189.2 L214.9 192.2 L213.0 194.9 L211.1 197.4 L209.1 199.6" fill="none" stroke="rgba(98,208,255,.15)" stroke-width="1"/><path d="M246.2 282.4 L247.3 282.1 L248.7 281.8 L250.4 281.4 L252.5 280.8 L254.9 280.2 L258.0 279.2 L261.6 278.0 L265.9 276.3 L271.0 274.0 L277.2 270.9 L284.4 266.8 L292.8 261.1 L302.5 253.6 L313.4 243.5 L325.2 230.5 L337.5 213.8 L349.3 193.4 L359.2 169.7 L365.4 144.3 L366.2 119.8 L360.7 99.6 L348.9 86.7 L332.4 82.7 L313.5 86.7 L294.4 96.3 L276.9 108.5 L261.8 121.1 L249.2 132.6 L239.1 142.3 L230.9 150.2 L224.4 156.6 L219.2 161.7 L215.0 165.8 L211.6 169.2 L208.8 172.0 L206.5 174.5 L204.5 176.6 L202.7 178.4 L201.0 180.0 L199.5 181.3 L198.0 182.4 L196.5 183.3 L195.0 183.9 L193.5 184.2 L192.1 184.4 L190.6 184.2 L189.1 183.8 L187.7 183.1 L186.4 182.1 L185.1 180.9 L184.0 179.4 L183.0 177.8 L182.2 176.0 L181.7 174.1 L181.4 172.2 L181.4 170.3 L181.6 168.5 L182.1 166.9 L182.9 165.5 L183.8 164.4 L185.0 163.5 L186.3 163.0 L187.6 162.9 L189.1 163.0 L190.5 163.5 L191.9 164.3 L193.2 165.3 L194.4 166.6 L195.5 168.0 L196.4 169.5 L197.1 171.1 L197.7 172.8 L198.1 174.5 L198.2 176.2 L198.2 177.8 L198.1 179.3 L197.7 180.7 L197.2 182.0 L196.4 183.1 L195.6 184.0 L194.6 184.7 L193.5 185.2 L192.3 185.4 L191.0 185.4 L189.6 185.1 L188.2 184.6 L186.8 183.7 L185.5 182.6 L184.3 181.2 L183.2 179.6 L182.2 177.8 L181.5 175.9 L181.0 173.8 L180.7 171.8 L180.8 169.8 L181.1 167.9 L181.7 166.2 L182.6 164.7 L183.7 163.5 L184.9 162.7 L186.3 162.3 L187.8 162.2 L189.4 162.5 L190.9 163.1 L192.4 163.9 L193.7 165.1 L195.0 166.5 L196.1 168.0 L197.0 169.6 L197.8 171.4 L198.3 173.2 L198.7 174.9 L198.8 176.7 L198.8 178.4 L198.5 179.9 L198.1 181.4 L197.5 182.7 L196.8 183.9 L195.8 184.8 L194.7 185.5 L193.5 186.0 L192.2 186.2 L190.9 186.2 L189.4 185.8 L187.9 185.2 L186.5 184.3 L185.1 183.0 L183.8 181.5 L182.6 179.8 L181.6 177.8 L180.9 175.7 L180.4 173.5 L180.2 171.3 L180.2 169.2 L180.6 167.2 L181.3 165.4 L182.3 163.9 L183.5 162.7 L184.9 161.9 L186.4 161.5 L188.0 161.5 L189.7 161.8 L191.3 162.5 L192.9 163.5 L194.3 164.8 L195.6 166.3 L196.7 168.0 L197.7 169.7 L198.4 171.6 L199.0 173.5 L199.3 175.3 L199.4 177.2 L199.4 178.9 L199.1 180.6 L198.6 182.1 L197.9 183.5 L197.1 184.7 L196.1 185.6 L195.0 186.4 L193.7 186.8 L192.3 187.1 L190.8 187.0 L189.3 186.6 L187.7 185.9 L186.2 184.9 L184.7 183.5 L183.3 181.9 L182.0 180.0 L181.0 177.9 L180.2 175.7 L179.7 173.3 L179.5 170.9 L179.7 168.6 L180.1 166.5 L180.9 164.6 L182.0 163.0 L183.3 161.8 L184.8 161.0 L186.5 160.7 L188.2 160.7 L190.0 161.1 L191.7 161.9 L193.3 163.1 L194.8 164.5 L196.2 166.1 L197.4 167.9 L198.3 169.8 L199.1 171.7 L199.7 173.7 L200.0 175.7 L200.1 177.7 L200.0 179.5 L199.7 181.2 L199.2 182.8 L198.4 184.3 L197.5 185.5 L196.5 186.5 L195.2 187.3 L193.9 187.7 L192.4 188.0 L190.8 187.9 L189.2 187.4 L187.5 186.7 L185.9 185.6 L184.3 184.1 L182.8 182.4 L181.5 180.4 L180.4 178.1 L179.6 175.7 L179.0 173.1 L178.9 170.6 L179.0 168.2 L179.5 165.9 L180.4 163.9 L181.6 162.2 L183.0 161.0 L184.7 160.1 L186.5 159.8 L188.3 159.9 L190.2 160.4 L192.0 161.3 L193.8 162.5 L195.4 164.1 L196.8 165.8 L198.0 167.7 L199.0 169.7 L199.8 171.8 L200.4 173.9 L200.7 176.0 L200.8 178.1 L200.7 180.0 L200.3 181.8 L199.8 183.5 L199.0 185.0 L198.1 186.3 L196.9 187.4 L195.6 188.2 L194.2 188.7 L192.6 188.9 L190.9 188.8 L189.2 188.4 L187.4 187.6 L185.7 186.4 L184.0 184.9 L182.4 183.0 L181.0 180.9 L179.8 178.5 L178.9 175.9 L178.3 173.1 L178.1 170.4 L178.3 167.8 L178.9 165.3 L179.8 163.2 L181.1 161.4 L182.6 160.1 L184.4 159.2 L186.3 158.8 L188.3 159.0 L190.3 159.5 L192.3 160.5 L194.1 161.9 L195.8 163.5 L197.4 165.4 L198.6 167.4 L199.7 169.6 L200.5 171.8 L201.1 174.0 L201.5 176.3 L201.6 178.4 L201.4 180.5 L201.1 182.4 L200.5 184.2 L199.7 185.7 L198.7 187.1 L197.5 188.3 L196.1 189.1 L194.6 189.7 L193.0 190.0 L191.2 189.9 L189.3 189.5 L187.5 188.6 L185.6 187.4 L183.8 185.9 L182.1 183.9 L180.5 181.6 L179.2 179.0 L178.2 176.3 L177.6 173.3 L177.4 170.4 L177.5 167.6 L178.1 164.9 L179.1 162.6 L180.4 160.6 L182.1 159.2 L184.0 158.2 L186.1 157.8 L188.2 157.9 L190.4 158.6 L192.5 159.6 L194.5 161.1 L196.3 162.8 L197.9 164.8 L199.3 167.0 L200.4 169.3 L201.3 171.6 L201.9 174.0 L202.3 176.3 L202.4 178.6 L202.3 180.8 L201.9 182.8 L201.3 184.7 L200.5 186.4 L199.5 187.9 L198.2 189.1 L196.8 190.1 L195.2 190.8 L193.5 191.1 L191.6 191.1 L189.7 190.7 L187.7 189.9 L185.7 188.7 L183.7 187.1 L181.8 185.0 L180.2 182.6 L178.7 179.9 L177.6 177.0 L176.9 173.8 L176.5 170.7 L176.6 167.6 L177.2 164.7 L178.2 162.1 L179.6 159.9 L181.4 158.3 L183.4 157.2 L185.6 156.7 L187.9 156.8 L190.2 157.4 L192.5 158.5 L194.6 160.0 L196.6 161.9 L198.3 164.0 L199.8 166.3 L201.1 168.7 L202.0 171.2 L202.7 173.8 L203.2 176.2 L203.3 178.7 L203.2 181.0 L202.9 183.2 L202.3 185.2 L201.5 187.0 L200.4 188.6 L199.2 190.0 L197.7 191.1 L196.1 191.9 L194.3 192.3 L192.3 192.4 L190.3 192.1 L188.1 191.3 L186.0 190.2 L183.9 188.6 L181.8 186.5 L180.0 184.0 L178.3 181.2 L177.0 178.1 L176.1 174.7 L175.6 171.3 L175.6 167.9 L176.1 164.7 L177.1 161.8 L178.6 159.4 L180.4 157.5 L182.5 156.2 L184.9 155.6 L187.3 155.6 L189.8 156.1 L192.3 157.2 L194.6 158.8 L196.7 160.7 L198.6 162.9 L200.3 165.3 L201.7 167.9 L202.8 170.6 L203.6 173.2 L204.1 175.9 L204.3 178.5 L204.3 180.9 L204.0 183.3 L203.4 185.5 L202.6 187.5 L201.6 189.2 L200.4 190.8 L198.9 192.0 L197.2 193.0 L195.3 193.6 L193.3 193.8 L191.2 193.6 L188.9 193.0 L186.6 192.0 L184.3 190.4 L182.1 188.4 L180.0 185.9 L178.2 183.0 L176.6 179.7 L175.4 176.2 L174.7 172.5 L174.6 168.8 L174.9 165.2 L175.8 162.0 L177.2 159.2 L179.0 156.9 L181.3 155.3 L183.8 154.4 L186.4 154.2 L189.1 154.6 L191.8 155.6 L194.3 157.2 L196.7 159.1 L198.8 161.4 L200.6 164.0 L202.2 166.7 L203.4 169.5 L204.4 172.3 L205.0 175.2 L205.4 177.9 L205.4 180.6 L205.2 183.1 L204.7 185.5 L204.0 187.7 L203.0 189.7 L201.8 191.4 L200.3 192.9 L198.7 194.0 L196.8 194.8 L194.7 195.3 L192.5 195.3 L190.2 194.9 L187.7 194.0 L185.2 192.7 L182.8 190.8 L180.5 188.3 L178.3 185.4 L176.4 182.1 L175.0 178.4 L173.9 174.5 L173.4 170.4 L173.5 166.4 L174.2 162.7 L175.5 159.4 L177.3 156.7 L179.5 154.6 L182.1 153.3 L184.9 152.7 L187.9 152.9 L190.8 153.8 L193.6 155.2 L196.2 157.2 L198.6 159.5 L200.7 162.1 L202.5 165.0 L204.0 167.9 L205.1 170.9 L205.9 173.9 L206.5 176.9 L206.7 179.8 L206.6 182.5 L206.2 185.1 L205.6 187.6 L204.7 189.8 L203.6 191.8 L202.2 193.5 L200.6 194.9 L198.7 196.0 L196.6 196.7 L194.4 197.1 L191.9 197.0 L189.4 196.4 L186.8 195.3 L184.1 193.6 L181.5 191.4 L179.0 188.6 L176.8 185.3 L174.9 181.6 L173.4 177.5 L172.5 173.1 L172.1 168.7 L172.5 164.4 L173.5 160.5 L175.1 157.1 L177.2 154.4 L179.8 152.4 L182.8 151.3 L185.9 151.1 L189.1 151.6 L192.2 152.8 L195.2 154.6 L197.9 156.9 L200.3 159.6 L202.5 162.5 L204.2 165.6 L205.7 168.8 L206.8 172.0 L207.5 175.2 L207.9 178.3 L208.1 181.3 L207.9 184.2 L207.4 186.9 L206.7 189.4 L205.7 191.7 L204.4 193.7 L202.9 195.5 L201.1 196.9 L199.1 198.0 L196.9 198.8 L194.5 199.1 L191.8 198.9 L189.1 198.2 L186.2 196.9 L183.4 195.1 L180.6 192.6 L177.9 189.6 L175.5 185.9 L173.5 181.8 L171.9 177.3 L171.0 172.5 L170.7 167.7 L171.2 163.0 L172.4 158.8 L174.3 155.2 L176.7 152.3 L179.7 150.4 L183.0 149.4 L186.4 149.3 L189.9 150.1 L193.2 151.6 L196.4 153.7 L199.3 156.3 L201.8 159.2 L204.0 162.5 L205.8 165.8 L207.3 169.2 L208.4 172.6 L209.1 176.0 L209.5 179.3 L209.6 182.5 L209.4 185.5 L208.9 188.3 L208.1 190.9 L207.1 193.3 L205.7 195.5 L204.1 197.4 L202.3 198.9 L200.2 200.1 L197.8 200.9 L195.2 201.3 L192.5 201.2 L189.5 200.5 L186.5 199.3 L183.3 197.4 L180.3 194.8 L177.3 191.6 L174.7 187.7 L172.4 183.2 L170.6 178.3 L169.5 173.1 L169.1 167.8 L169.5 162.6 L170.8 157.9 L172.8 153.8 L175.5 150.6 L178.7 148.4 L182.3 147.3 L186.1 147.2 L189.9 148.0 L193.5 149.7 L197.0 152.0 L200.1 154.8 L202.9 158.0 L205.3 161.5 L207.2 165.1 L208.8 168.8 L210.0 172.4 L210.8 176.0 L211.3 179.5 L211.5 182.9 L211.3 186.1 L210.8 189.1 L210.1 191.9 L209.0 194.5 L207.7 196.9 L206.1 199.0 L204.2 200.7 L202.1 202.2 L199.7 203.2 L197.0 203.8 L194.2 203.9 L191.1 203.5 L187.8 202.5 L184.5 200.7 L181.1 198.3 L177.8 195.2 L174.7 191.2 L171.9 186.6 L169.7 181.4 L168.1 175.7 L167.3 169.8 L167.4 164.0 L168.4 158.5 L170.3 153.7 L173.0 149.7 L176.4 146.9 L180.2 145.2 L184.4 144.7 L188.6 145.3 L192.7 146.9 L196.5 149.2 L200.1 152.2 L203.2 155.5 L206.0 159.2 L208.2 163.1 L210.1 167.0 L211.5 170.9 L212.6 174.8 L213.2 178.5 L213.5 182.2 L213.5 185.6 L213.2 188.9 L212.6 192.0 L211.7 194.9 L210.5 197.6 L209.0 200.0 L207.3 202.1 L205.2 203.9 L202.9 205.3 L200.3 206.4 L197.4 207.0 L194.3 207.0 L190.9 206.5 L187.4 205.3 L183.7 203.4 L180.0 200.7 L176.4 197.1 L173.0 192.7 L169.9 187.6 L167.5 181.7 L165.8 175.3 L165.0 168.7 L165.3 162.2 L166.6 156.1" fill="none" stroke="#62d0ff" stroke-width="1.5" stroke-linejoin="round"/><path d="M246.2 282.4 L247.3 282.1 L248.7 281.8 L250.4 281.4 L252.5 280.8 L254.9 280.2 L258.0 279.2 L261.6 278.0 L265.9 276.3 L271.0 274.0 L277.2 270.9 L284.4 266.8 L292.8 261.1 L302.5 253.6 L313.4 243.5 L325.2 230.5 L337.5 213.8 L349.3 193.4 L359.2 169.7 L365.4 144.3 L366.2 119.8 L360.7 99.6 L348.9 86.7 L332.4 82.7 L313.5 86.7 L294.4 96.3 L276.9 108.5 L261.8 121.1 L249.2 132.6 L239.1 142.3 L230.9 150.2 L224.4 156.6 L219.2 161.7 L215.0 165.8 L211.6 169.2 L208.8 172.0 L206.5 174.5 L204.5 176.6 L202.7 178.4 L201.0 180.0 L199.5 181.3 L198.0 182.4 L196.5 183.3 L195.0 183.9 L193.5 184.2 L192.1 184.4 L190.6 184.2 L189.1 183.8 L187.7 183.1 L186.4 182.1 L185.1 180.9 L184.0 179.4 L183.0 177.8 L182.2 176.0 L181.7 174.1 L181.4 172.2 L181.4 170.3 L181.6 168.5 L182.1 166.9 L182.9 165.5 L183.8 164.4 L185.0 163.5 L186.3 163.0 L187.6 162.9 L189.1 163.0 L190.5 163.5 L191.9 164.3 L193.2 165.3 L194.4 166.6 L195.5 168.0 L196.4 169.5 L197.1 171.1 L197.7 172.8 L198.1 174.5 L198.2 176.2 L198.2 177.8 L198.1 179.3 L197.7 180.7 L197.2 182.0 L196.4 183.1 L195.6 184.0 L194.6 184.7 L193.5 185.2 L192.3 185.4 L191.0 185.4 L189.6 185.1 L188.2 184.6 L186.8 183.7 L185.5 182.6 L184.3 181.2 L183.2 179.6 L182.2 177.8 L181.5 175.9 L181.0 173.8 L180.7 171.8 L180.8 169.8 L181.1 167.9 L181.7 166.2 L182.6 164.7 L183.7 163.5 L184.9 162.7 L186.3 162.3 L187.8 162.2 L189.4 162.5 L190.9 163.1 L192.4 163.9 L193.7 165.1 L195.0 166.5 L196.1 168.0 L197.0 169.6 L197.8 171.4 L198.3 173.2 L198.7 174.9 L198.8 176.7 L198.8 178.4 L198.5 179.9 L198.1 181.4 L197.5 182.7 L196.8 183.9 L195.8 184.8 L194.7 185.5 L193.5 186.0 L192.2 186.2 L190.9 186.2 L189.4 185.8 L187.9 185.2 L186.5 184.3 L185.1 183.0 L183.8 181.5 L182.6 179.8 L181.6 177.8 L180.9 175.7 L180.4 173.5 L180.2 171.3 L180.2 169.2 L180.6 167.2 L181.3 165.4 L182.3 163.9 L183.5 162.7 L184.9 161.9 L186.4 161.5 L188.0 161.5 L189.7 161.8 L191.3 162.5 L192.9 163.5 L194.3 164.8 L195.6 166.3 L196.7 168.0 L197.7 169.7 L198.4 171.6 L199.0 173.5 L199.3 175.3 L199.4 177.2 L199.4 178.9 L199.1 180.6 L198.6 182.1 L197.9 183.5 L197.1 184.7 L196.1 185.6 L195.0 186.4 L193.7 186.8 L192.3 187.1 L190.8 187.0 L189.3 186.6 L187.7 185.9 L186.2 184.9 L184.7 183.5 L183.3 181.9 L182.0 180.0 L181.0 177.9 L180.2 175.7 L179.7 173.3 L179.5 170.9 L179.7 168.6 L180.1 166.5 L180.9 164.6 L182.0 163.0 L183.3 161.8 L184.8 161.0 L186.5 160.7 L188.2 160.7 L190.0 161.1 L191.7 161.9 L193.3 163.1 L194.8 164.5 L196.2 166.1 L197.4 167.9 L198.3 169.8 L199.1 171.7 L199.7 173.7 L200.0 175.7 L200.1 177.7 L200.0 179.5 L199.7 181.2 L199.2 182.8 L198.4 184.3 L197.5 185.5 L196.5 186.5 L195.2 187.3 L193.9 187.7 L192.4 188.0 L190.8 187.9 L189.2 187.4 L187.5 186.7 L185.9 185.6 L184.3 184.1 L182.8 182.4 L181.5 180.4 L180.4 178.1 L179.6 175.7 L179.0 173.1 L178.9 170.6 L179.0 168.2 L179.5 165.9 L180.4 163.9 L181.6 162.2 L183.0 161.0 L184.7 160.1 L186.5 159.8 L188.3 159.9 L190.2 160.4 L192.0 161.3 L193.8 162.5 L195.4 164.1 L196.8 165.8 L198.0 167.7 L199.0 169.7 L199.8 171.8 L200.4 173.9 L200.7 176.0 L200.8 178.1 L200.7 180.0 L200.3 181.8 L199.8 183.5 L199.0 185.0 L198.1 186.3 L196.9 187.4 L195.6 188.2 L194.2 188.7 L192.6 188.9 L190.9 188.8 L189.2 188.4 L187.4 187.6 L185.7 186.4 L184.0 184.9 L182.4 183.0 L181.0 180.9 L179.8 178.5 L178.9 175.9 L178.3 173.1 L178.1 170.4 L178.3 167.8 L178.9 165.3 L179.8 163.2 L181.1 161.4 L182.6 160.1 L184.4 159.2 L186.3 158.8 L188.3 159.0 L190.3 159.5 L192.3 160.5 L194.1 161.9 L195.8 163.5 L197.4 165.4 L198.7 167.4 L199.7 169.6 L200.5 171.8 L201.1 174.0 L201.5 176.3 L201.6 178.4 L201.4 180.5 L201.1 182.4 L200.5 184.2 L199.7 185.7 L198.7 187.1 L197.5 188.3 L196.1 189.1 L194.6 189.7 L193.0 190.0 L191.2 189.9 L189.3 189.5 L187.5 188.6 L185.6 187.4 L183.8 185.9 L182.1 183.9 L180.5 181.6 L179.2 179.0 L178.2 176.3 L177.6 173.3 L177.4 170.4 L177.5 167.6 L178.1 164.9 L179.1 162.6 L180.4 160.6 L182.1 159.2 L184.0 158.2 L186.1 157.8 L188.2 157.9 L190.4 158.6 L192.5 159.6 L194.5 161.1 L196.3 162.8 L197.9 164.8 L199.3 167.0 L200.4 169.3 L201.3 171.6 L201.9 174.0 L202.3 176.3 L202.4 178.6 L202.3 180.8 L201.9 182.8 L201.3 184.7 L200.5 186.4 L199.5 187.9 L198.2 189.1 L196.8 190.1 L195.2 190.8 L193.5 191.1 L191.6 191.1 L189.7 190.7 L187.7 189.9 L185.7 188.7 L183.7 187.1 L181.8 185.0 L180.2 182.6 L178.7 179.9 L177.6 177.0 L176.9 173.8 L176.5 170.7 L176.6 167.6 L177.2 164.7 L178.2 162.1 L179.6 159.9 L181.4 158.3 L183.4 157.2 L185.6 156.7 L187.9 156.8 L190.2 157.4 L192.5 158.5 L194.6 160.0 L196.6 161.9 L198.3 164.0 L199.8 166.3 L201.1 168.7 L202.0 171.2 L202.7 173.8 L203.2 176.2 L203.3 178.7 L203.2 181.0 L202.9 183.2 L202.3 185.2 L201.5 187.0 L200.4 188.6 L199.2 190.0 L197.7 191.1 L196.1 191.9 L194.3 192.3 L192.3 192.4 L190.3 192.1 L188.1 191.3 L186.0 190.2 L183.9 188.6 L181.8 186.5 L180.0 184.0 L178.3 181.2 L177.0 178.1 L176.1 174.7 L175.6 171.3 L175.6 167.9 L176.1 164.7 L177.1 161.8 L178.6 159.4 L180.4 157.5 L182.5 156.2 L184.9 155.6 L187.3 155.6 L189.8 156.1 L192.3 157.2 L194.6 158.8 L196.7 160.7 L198.6 162.9 L200.3 165.3 L201.7 167.9 L202.8 170.6 L203.6 173.2 L204.1 175.9 L204.3 178.5 L204.3 180.9 L204.0 183.3 L203.4 185.5 L202.6 187.5 L201.6 189.2 L200.4 190.8 L198.9 192.0 L197.2 193.0 L195.3 193.6 L193.3 193.8 L191.2 193.6 L188.9 193.0 L186.6 192.0 L184.3 190.4 L182.1 188.4 L180.0 185.9 L178.2 183.0 L176.6 179.7 L175.4 176.2 L174.7 172.5 L174.6 168.8 L174.9 165.2 L175.8 162.0 L177.2 159.2 L179.0 156.9 L181.3 155.3 L183.8 154.4 L186.4 154.2 L189.1 154.6 L191.8 155.6 L194.3 157.2 L196.7 159.1 L198.8 161.4 L200.6 164.0 L202.2 166.7 L203.4 169.5 L204.4 172.3 L205.0 175.2 L205.4 177.9 L205.4 180.6 L205.2 183.1 L204.7 185.5 L204.0 187.7 L203.0 189.7 L201.8 191.4 L200.3 192.9 L198.7 194.0 L196.8 194.8 L194.7 195.3 L192.5 195.3 L190.2 194.9 L187.7 194.0 L185.2 192.7 L182.8 190.8 L180.5 188.3 L178.3 185.4 L176.4 182.1 L175.0 178.4 L173.9 174.5 L173.4 170.4 L173.5 166.4 L174.2 162.7 L175.5 159.4 L177.3 156.7 L179.5 154.6 L182.1 153.3 L184.9 152.7 L187.9 152.9 L190.8 153.8 L193.6 155.2 L196.2 157.2 L198.6 159.5 L200.7 162.1 L202.5 165.0 L204.0 167.9 L205.1 170.9 L205.9 173.9 L206.5 176.9 L206.7 179.8 L206.6 182.5 L206.2 185.1 L205.6 187.6 L204.7 189.8 L203.6 191.8 L202.2 193.5 L200.6 194.9 L198.7 196.0 L196.6 196.7 L194.4 197.1 L191.9 197.0 L189.4 196.4 L186.8 195.3 L184.1 193.6 L181.5 191.4 L179.0 188.6 L176.8 185.3 L174.9 181.6 L173.4 177.5 L172.5 173.1 L172.1 168.7 L172.5 164.4 L173.5 160.5 L175.1 157.1 L177.2 154.4 L179.8 152.4 L182.8 151.3 L185.9 151.1 L189.1 151.6 L192.2 152.8 L195.2 154.6 L197.9 156.9 L200.3 159.6 L202.5 162.5 L204.2 165.6 L205.7 168.8 L206.8 172.0 L207.5 175.2 L207.9 178.3 L208.1 181.3 L207.9 184.2 L207.4 186.9 L206.7 189.4 L205.7 191.7 L204.4 193.7 L202.9 195.5 L201.1 196.9 L199.1 198.0 L196.9 198.8 L194.5 199.1 L191.8 198.9 L189.1 198.2 L186.2 196.9 L183.4 195.1 L180.6 192.6 L177.9 189.6 L175.5 185.9 L173.5 181.8 L171.9 177.3 L171.0 172.5 L170.7 167.7 L171.2 163.0 L172.4 158.8 L174.3 155.2 L176.7 152.3 L179.7 150.4 L183.0 149.4 L186.4 149.3 L189.9 150.1 L193.2 151.6 L196.4 153.7 L199.3 156.3 L201.8 159.2 L204.0 162.5 L205.8 165.8 L207.3 169.2 L208.4 172.6 L209.1 176.0 L209.5 179.3 L209.6 182.5 L209.4 185.5 L208.9 188.3 L208.1 190.9 L207.1 193.3 L205.7 195.5 L204.1 197.4 L202.3 198.9 L200.2 200.1 L197.8 200.9 L195.2 201.3 L192.5 201.2 L189.5 200.5 L186.5 199.3 L183.3 197.4 L180.3 194.8 L177.3 191.6 L174.7 187.7 L172.4 183.2 L170.6 178.3 L169.5 173.1 L169.1 167.8 L169.5 162.6 L170.8 157.9 L172.8 153.8 L175.5 150.6 L178.7 148.4 L182.3 147.3 L186.1 147.2 L189.9 148.0 L193.5 149.7 L197.0 152.0 L200.1 154.8 L202.9 158.0 L205.3 161.5 L207.2 165.1 L208.8 168.8 L210.0 172.4 L210.8 176.0 L211.3 179.5 L211.5 182.9 L211.3 186.1 L210.8 189.1 L210.1 191.9 L209.0 194.5 L207.7 196.9 L206.1 199.0 L204.2 200.7 L202.1 202.2 L199.7 203.2 L197.0 203.8 L194.2 203.9 L191.1 203.5 L187.8 202.5 L184.5 200.7 L181.1 198.3 L177.8 195.2 L174.7 191.2 L171.9 186.6 L169.7 181.4 L168.1 175.7 L167.3 169.8 L167.4 164.0 L168.4 158.5 L170.3 153.7 L173.0 149.7 L176.4 146.9 L180.2 145.2 L184.4 144.7 L188.6 145.3 L192.7 146.9 L196.5 149.2 L200.1 152.2 L203.2 155.5 L206.0 159.2 L208.2 163.1 L210.1 167.0 L211.5 170.9 L212.6 174.8 L213.2 178.5 L213.5 182.2 L213.5 185.6 L213.2 188.9 L212.6 192.0 L211.7 194.9 L210.5 197.6 L209.0 200.0 L207.3 202.1 L205.2 203.9 L202.9 205.3 L200.3 206.4 L197.4 207.0 L194.3 207.0 L190.9 206.5 L187.4 205.3 L183.7 203.4 L180.0 200.7 L176.4 197.1 L173.0 192.7 L169.9 187.6 L167.5 181.7 L165.8 175.3 L165.0 168.7 L165.3 162.2 L166.6 156.1" fill="none" stroke="#ff9770" stroke-width="1.5" stroke-linejoin="round"/><circle cx="166.6" cy="156.1" r="4" fill="#62d0ff" stroke="#0a0d12" stroke-width="1.4"/><circle cx="166.6" cy="156.1" r="4" fill="#ff9770" stroke="#0a0d12" stroke-width="1.4"/></svg><div class="figcap">浅色是吸引子本身；两条彩色线从相差 10⁻⁵ 的初值出发，几十步之后已经各走一边。</div>
+        </div>
+        <div>
+          <div class="a kicker">THE BUTTERFLY · 一台会撒谎的机器</div>
+          <h2 class="a">确定性不等于可预测</h2>
+          <p class="a p">1961 年冬，麻省理工的洛伦兹在跑一个简化的大气对流模型，十二个方程。某天他想从中间接着算，为了省事，直接从打印纸上抄了初值：<strong>0.506</strong>。</p>
+          <p class="a p">机器里存着的其实是 <strong>0.506127</strong>。差的不过万分之一。再算出来的天气，从几乎重合开始，慢慢分叉，最后面目全非。</p>
+          <div class="a pull">"这有点像看着自己的影子，抬起头却发现影子不在了。"<cite>—— 洛伦兹回忆那次重跑</cite></div>
+          <p class="a p">1972 年他给演讲起了个传遍世界的标题：<b>「可预测性：巴西一只蝴蝶扇动翅膀，会引发德克萨斯州的龙卷风吗？」</b></p>
+        </div>
+      </div>
+    </div>
+  
+  <div class="pfoot">§9.1 混沌水车</div>
+</section>
+
+
+  <!-- ========== 14 演示04 洛伦兹 ========== -->
+  <section class="page" data-title="演示 04 · 洛伦兹方程" data-steps="3" data-hook="lorenz">
+    <div class="page-inner">
+      <div class="split" style="grid-template-columns:1.1fr .9fr">
+        <div class="a demo">
+          <canvas id="cv4" height="390"></canvas>
+          <div class="ctrls">
+            <div class="slider"><span>初值差 δ</span>
+              <input type="range" id="d4" min="-9" max="-2" step="0.1" value="-2"><b id="d4v">1e-2</b></div>
+            <button class="btn" id="reset4">重放</button>
+          </div>
+          <div class="readout" id="ro4"></div>
+        </div>
+        <div class="a">
+          <div class="steps" id="st4">
+            <div class="step on">
+              <div class="snum">01 / 03 · 手抖了</div>
+              <h3>δ = 10⁻²：肉眼可见的差别</h3>
+              <p>两条轨迹很快分开。这没什么奇怪——初值本来就不一样，谁都会说它们当然会走岔。</p>
+            </div>
+            <div class="step">
+              <div class="snum">02 / 03 · 手很稳</div>
+              <h3>δ = 10⁻⁵：开头几乎重合</h3>
+              <p>前几秒两条线几乎叠成一条。<strong>差别小到任何观测者都会认为它们相同</strong>——可它们终究会分开。</p>
+            </div>
+            <div class="step">
+              <div class="snum">03 / 03 · 机器精度</div>
+              <h3>δ = 10⁻⁹：仍然分道扬镳</h3>
+              <p>把误差压到十亿分之一，两条命运照样分开，只是要等久一点。<strong>差距不是靠精确解决的，而是靠结构被放大的。</strong></p>
+            </div>
+          </div>
+          <div class="sdots" id="sd4"><i class="on"></i><i></i><i></i></div>
+          <div class="readout" style="margin-top:14px">点画面可暂停；σ=10　r=28　b=8/3</div>
+        </div>
+      </div>
+    </div>
+  
+  <div class="pfoot">§9.3 奇怪吸引子上的混沌</div>
+</section>
+
+
+  <!-- ========== 15 三条件 ========== -->
+  <section class="page" data-title="混沌的三个条件">
+    <div class="page-inner">
+      <div class="a kicker">DEFINITION · 三条件缺一不可</div>
+      <h2 class="a">什么叫"混沌"</h2>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:22px">
+        <div class="a card">
+          <h4 style="color:var(--gold)">① 确定性</h4>
+          <p>方程里没有随机项。给定初值，未来只有一条。<strong>规则里没有骰子。</strong></p>
+        </div>
+        <div class="a card">
+          <h4 style="color:var(--cyan)">② 有界</h4>
+          <p>轨道被困在有限区域里，不会发散到无穷。<strong>它跑不掉。</strong></p>
+        </div>
+        <div class="a card">
+          <h4 style="color:var(--warm)">③ 敏感依赖</h4>
+          <p>任意接近的两个初值，轨道会<strong>指数分离</strong>。<strong>它记不住自己从哪来。</strong></p>
+        </div>
+      </div>
+      <p class="a p" style="margin-top:22px;max-width:54em">三条同时成立才叫混沌。少一条都不算：随机噪声满足③却不是①；指数发散满足③却不是②。</p>
+      <p class="a p" style="max-width:54em"><b>几何上它就是"拉伸 + 折叠"</b>：把面团拉长（相邻点分离），再对折回去（不让它跑远），反复揉。所有奇怪吸引子的形状，都是这两件事的反复复合。</p>
+    </div>
+  
+  <div class="pfoot">§9.3 奇怪吸引子上的混沌</div>
+</section>
+
+
+  <!-- ========== 16 全书地图 ========== -->
+  <section class="page" data-title="全书地图 · 12 章">
+    <div class="page-inner">
+      <div class="a kicker">THE MAP · 全书 12 章</div>
+      <h2 class="a" style="margin-bottom:6px">接下来会走的路</h2>
+      <p class="a p" style="font-size:13.5px;margin-bottom:0">维度一级一级往上加，每加一维就多出几种现象。点卡片看它解决什么问题。</p>
+      <div class="map" id="map">
+        <div class="mcard here" data-ch="1"><div class="n">CH 01</div><h5>概述</h5><div class="one">你在这里：换一套看法</div></div>
+        <div class="mcard" data-ch="2"><div class="n">CH 02</div><h5>直线上的流</h5><div class="one">直线上的箭头、势能</div></div>
+        <div class="mcard" data-ch="3"><div class="n">CH 03</div><h5>分岔</h5><div class="one">参数一变，命运跳变</div></div>
+        <div class="mcard" data-ch="4"><div class="n">CH 04</div><h5>圆上的流</h5><div class="one">振子、锁相、萤火虫</div></div>
+        <div class="mcard" data-ch="5"><div class="n">CH 05</div><h5>线性系统</h5><div class="one">特征值分类表</div></div>
+        <div class="mcard" data-ch="6"><div class="n">CH 06</div><h5>相平面</h5><div class="one">二维动物园、指数定理</div></div>
+        <div class="mcard" data-ch="7"><div class="n">CH 07</div><h5>极限环</h5><div class="one">自持振荡的两个判据</div></div>
+        <div class="mcard" data-ch="8"><div class="n">CH 08</div><h5>再探分岔</h5><div class="one">霍普夫、化学振荡</div></div>
+        <div class="mcard" data-ch="9"><div class="n">CH 09</div><h5>洛伦兹方程</h5><div class="one">第一个奇怪吸引子</div></div>
+        <div class="mcard" data-ch="10"><div class="n">CH 10</div><h5>一维映射</h5><div class="one">倍周期、费根鲍姆</div></div>
+        <div class="mcard" data-ch="11"><div class="n">CH 11</div><h5>分形</h5><div class="one">维数可以不是整数</div></div>
+        <div class="mcard" data-ch="12"><div class="n">CH 12</div><h5>奇怪吸引子</h5><div class="one">从一列数据重建形状</div></div>
+      </div>
+      <p class="a p" style="margin-top:16px;font-size:13px">按每周 4–6 小时，一章约一周：一次顺着正文与演示走（40 分钟，只求"图在说什么"），一次专攻推导（1 小时，拿纸笔跟着换元）。</p>
+    </div>
+  
+  <div class="pfoot">—</div>
+</section>
+
+
+  <!-- ========== 17 自测 ========== -->
+  <section class="page" data-title="自测 · 五道题">
+    <div class="page-inner">
+      <div class="a kicker">CHECK · 五道题</div>
+      <h2 class="a" style="margin-bottom:14px">确认这一章真的进去了</h2>
+      <div class="qs" id="quizbox"></div>
+      <div class="score" id="score"></div>
+      <label class="a done" id="donebox">
+        <input type="checkbox" id="doneChk">
+        <span>这一章读完了（勾上之后下次打开还在，进度存在你这台机器上）</span>
+      </label>
+    </div>
+  
+  <div class="pfoot">—</div>
+</section>
+
+
+  <!-- ========== 18 收尾 ========== -->
+  <section class="page" data-title="带走三句话">
+    <div class="page-inner center">
+      <div class="a kicker" style="justify-content:center">TAKEAWAY</div>
+      <h2 class="a" style="margin-bottom:26px">这一章，带走三句话</h2>
+      <div style="display:grid;gap:12px;max-width:760px;margin:0 auto;text-align:left">
+        <div class="a card"><h4>01 · 不解方程，也能判断命运</h4><p>相图把"所有可能的历史"画在一张纸上，稳定性一眼可见。</p></div>
+        <div class="a card"><h4>02 · 线性是特例，非线性是常态</h4><p>叠加一旦失效，就会多出多稳态、阈值、突变这些新性质。</p></div>
+        <div class="a card"><h4>03 · 确定性不等于可预测</h4><p>规则里没有骰子，但相邻轨道会指数分离——这就是混沌。</p></div>
+      </div>
+      <p class="a p" style="margin-top:26px;color:var(--dim);font-size:13px">下一章：直线上的流 —— 一条直线上，能发生多少事</p>
+    </div>
+  
+  <div class="pfoot">—</div>
+</section>
+
+
+</main>
+
+<script>
+(function(){
+"use strict";
+var $=function(s,r){return (r||document).querySelector(s);};
+var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s));};
+var REDUCE=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+var C={text:"#8b95a4",gold:"#e8b04b",cyan:"#62d0ff",warm:"#ff9770",teal:"#4fbfa8",grid:"rgba(255,255,255,.06)"};
+
+/* ================= 翻页 ================= */
+var pages=$$(".page"), dotsBox=$("#dots"), rail=$("#rail"),
+    counter=$("#counter"), whereEl=$("#where"), tip=$("#tip");
+var idx=0, steps=[], lock=false;
+
+pages.forEach(function(p,i){
+  steps[i]=0;
+  var b=document.createElement("button");
+  b.setAttribute("aria-label","第 "+(i+1)+" 页");
+  b.innerHTML='<i></i>';
+  b.addEventListener("click",function(){ go(i); });
+  dotsBox.appendChild(b);
+});
+var dotEls=$$("#dots button");
+
+function setStep(pi,s){
+  steps[pi]=s;
+  var page=pages[pi];
+  $$(".step",page).forEach(function(el,k){ el.classList.toggle("on",k===s); });
+  $$(".sdots i",page).forEach(function(el,k){ el.classList.toggle("on",k===s); });
+  var hook=page.getAttribute("data-hook");
+  if(hook==="flow"&&window.NDC1) window.NDC1.pick(s);
+  if(hook==="pend"&&window.NDC2) window.NDC2.setGamma([0,0.22,0.75][s]);
+  if(hook==="lorenz"&&window.NDC4) window.NDC4.setDelta([1e-2,1e-5,1e-9][s]);
+}
+function paint(){
+  for(var i=0;i<pages.length;i++) pages[i].classList.toggle("on",i===idx);
+  for(var k=0;k<dotEls.length;k++) dotEls[k].classList.toggle("on",k===idx);
+  rail.style.width=(((idx+1)/pages.length)*100).toFixed(2)+"%";
+  counter.innerHTML="<b>"+String(idx+1).padStart(2,"0")+"</b> / "+pages.length;
+  whereEl.innerHTML="<b>"+(pages[idx].getAttribute("data-title")||"")+"</b>";
+}
+function go(i){
+  if(i<0||i>=pages.length) return;
+  idx=i;
+  var inner=$(".page-inner",pages[idx]);
+  if(inner) inner.scrollTop=0;
+  if(window.__FITS) window.__FITS.forEach(function(fn){ try{ fn(); }catch(e){} });
+  paint();
+  setStep(idx,0);
+  if(idx>0) tip.classList.add("hide");
+}
+function next(){
+  var p=pages[idx], n=parseInt(p.getAttribute("data-steps")||"0",10), s=steps[idx]||0;
+  if(n>0&&s<n-1){ setStep(idx,s+1); return; }
+  if(idx<pages.length-1) go(idx+1);
+}
+function prev(){
+  var p=pages[idx], n=parseInt(p.getAttribute("data-steps")||"0",10), s=steps[idx]||0;
+  if(n>0&&s>0){ setStep(idx,s-1); return; }
+  if(idx>0) go(idx-1);
+}
+function innerEdge(dir){
+  var inner=pages[idx]&&$(".page-inner",pages[idx]);
+  if(!inner||inner.scrollHeight<=inner.clientHeight+4) return true;
+  if(dir>0) return inner.scrollTop+inner.clientHeight>=inner.scrollHeight-6;
+  return inner.scrollTop<=3;
+}
+paint(); setStep(0,0);
+
+window.addEventListener("wheel",function(e){
+  if(lock) return;
+  if(Math.abs(e.deltaY)<8) return;
+  var dir=e.deltaY>0?1:-1;
+  if(!innerEdge(dir)) return;
+  lock=true;
+  if(dir>0) next(); else prev();
+  window.setTimeout(function(){ lock=false; }, 620);
+},{passive:true});
+
+window.addEventListener("keydown",function(e){
+  var k=e.key;
+  if(k==="ArrowDown"||k==="ArrowRight"||k===" "||k==="PageDown"||k==="Enter"){ e.preventDefault(); next(); }
+  else if(k==="ArrowUp"||k==="ArrowLeft"||k==="PageUp"){ e.preventDefault(); prev(); }
+  else if(k==="Home"){ e.preventDefault(); go(0); }
+  else if(k==="End"){ e.preventDefault(); go(pages.length-1); }
+});
+
+var ty=null;
+window.addEventListener("touchstart",function(e){ ty=e.touches[0].clientY; },{passive:true});
+window.addEventListener("touchend",function(e){
+  if(ty===null) return;
+  var dy=ty-e.changedTouches[0].clientY;
+  if(Math.abs(dy)>46){ dy>0?next():prev(); }
+  ty=null;
+},{passive:true});
+
+/* ================= 画布工具 ================= */
+function makeCanvas(cv){
+  var ctx=cv.getContext("2d");
+  var dpr=Math.min(window.devicePixelRatio||1,2);
+  var h0=parseInt(cv.getAttribute("height"),10)||330;
+  var w=cv.clientWidth||600, h=h0;
+  function fit(){
+    w=cv.clientWidth||600;
+    cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
+    cv.style.height=h+"px";
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  fit(); window.addEventListener("resize",fit);
+  window.__FITS=window.__FITS||[]; window.__FITS.push(fit);
+  return {ctx:ctx,fit:fit,w:function(){return w;},h:function(){return h;}};
+}
+function loop(cv,fn){
+  function tick(){
+    try{
+      var pg=cv.closest(".page");
+      if(!pg||pg.classList.contains("on")) fn();
+    }catch(e){ /* 单帧出错不中断动画循环 */ }
+    window.requestAnimationFrame(tick);
+  }
+  window.requestAnimationFrame(tick);
+}
+function tip(ctx,txt,x,y,color,size,align){
+  ctx.fillStyle=color||C.text;
+  ctx.font=(size||11)+'px "PingFang SC","Microsoft YaHei",sans-serif';
+  ctx.textAlign=align||"left";
+  ctx.fillText(txt,x,y);
+}
+
+/* ================= 演示 01 · 一维流 ================= */
+(function(){
+  var cv=$("#cv1"); if(!cv) return;
+  var U=makeCanvas(cv), ctx=U.ctx;
+  var SYS={
+    lin:{f:function(x){return -x;}, R:3.2, s:2.6, name:"ẋ = −x"},
+    cubic:{f:function(x){return x-x*x*x;}, R:2.2, s:0.35, name:"ẋ = x − x³"},
+    sin:{f:function(x){return Math.sin(x);}, R:3.7, s:0.55, name:"ẋ = sin x"}
+  };
+  var key="cubic", x=SYS.cubic.s, locked=false;
+
+  function roots(f,a,b){
+    var out=[], n=1400, px=a, pv=f(a);
+    for(var i=1;i<=n;i++){
+      var cx=a+(b-a)*i/n, cvv=f(cx);
+      if(pv===0) out.push(px);
+      if(pv*cvv<0){
+        var lo=px, hi=cx;
+        for(var k=0;k<50;k++){ var m=(lo+hi)/2; if(f(lo)*f(m)<=0) hi=m; else lo=m; }
+        out.push((lo+hi)/2);
+      }
+      px=cx; pv=cvv;
+    }
+    return out.filter(function(v,i,arr){return i===0||Math.abs(v-arr[i-1])>1e-4;});
+  }
+
+  function draw(){
+    var w=U.w(), h=U.h(), S=SYS[key], R=S.R, f=S.f;
+    ctx.clearRect(0,0,w,h);
+    var padL=36, padR=16;
+    var X=function(v){return padL+(v+R)/(2*R)*(w-padL-padR);};
+    var gTop=18, gBot=Math.max(140,Math.min(180,h*0.54));
+    var gy0=(gTop+gBot)/2, gAmp=(gBot-gTop)/2-4;
+    var mx=1e-6;
+    for(var i=0;i<=300;i++){ var v=Math.abs(f(-R+2*R*i/300)); if(v>mx) mx=v; }
+    var Y=function(v){return gy0-v/mx*gAmp;};
+
+    ctx.strokeStyle=C.grid; ctx.lineWidth=1;
+    for(var g=1;g<10;g++){
+      var px=padL+(w-padL-padR)*g/10;
+      ctx.beginPath(); ctx.moveTo(px,gTop); ctx.lineTo(px,gBot); ctx.stroke();
+    }
+    ctx.strokeStyle="rgba(255,255,255,.22)"; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(padL,Y(0)); ctx.lineTo(w-padR,Y(0)); ctx.stroke();
+    ctx.beginPath();
+    for(var t=0;t<=500;t++){
+      var vv=-R+2*R*t/500, qx=X(vv), qy=Y(f(vv));
+      if(t) ctx.lineTo(qx,qy); else ctx.moveTo(qx,qy);
+    }
+    ctx.strokeStyle=C.gold; ctx.lineWidth=2; ctx.lineJoin="round"; ctx.stroke();
+    tip(ctx,"f(x) 的形状",padL,14,C.text,10.5);
+
+    var py=h-62;
+    ctx.strokeStyle="rgba(255,255,255,.24)"; ctx.lineWidth=1.6;
+    ctx.beginPath(); ctx.moveTo(padL,py); ctx.lineTo(w-padR,py); ctx.stroke();
+    var N=Math.max(10,Math.floor((w-padL-padR)/38));
+    for(var a=0;a<=N;a++){
+      var xv=-R+2*R*a/N, fv=f(xv);
+      if(Math.abs(fv)<mx*0.05) continue;
+      var p0=X(xv), dir=fv>0?1:-1, L=9;
+      ctx.strokeStyle="rgba(139,149,164,.55)"; ctx.lineWidth=1.3;
+      ctx.beginPath(); ctx.moveTo(p0-dir*L,py); ctx.lineTo(p0+dir*L,py); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(p0+dir*L,py);
+      ctx.lineTo(p0+dir*(L-4.5),py-3); ctx.lineTo(p0+dir*(L-4.5),py+3);
+      ctx.closePath(); ctx.fillStyle="rgba(139,149,164,.55)"; ctx.fill();
+    }
+    roots(f,-R,R).forEach(function(r){
+      var sl=(f(r+1e-3)-f(r-1e-3))/2e-3, p0=X(r);
+      ctx.beginPath(); ctx.arc(p0,py,5.4,0,Math.PI*2);
+      ctx.fillStyle=sl<0?C.warm:"rgba(255,151,112,.16)";
+      ctx.strokeStyle=C.warm; ctx.lineWidth=1.5; ctx.fill(); ctx.stroke();
+      tip(ctx,sl<0?"稳定":"不稳",p0,py+26,sl<0?"#ffb59c":"#5c6775",10,"center");
+    });
+
+    var xp=X(x), fvx=f(x);
+    ctx.strokeStyle="rgba(98,208,255,.22)"; ctx.setLineDash([3,4]); ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(xp,Y(0)); ctx.lineTo(xp,py); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(xp,py,5,0,Math.PI*2); ctx.fillStyle=C.cyan; ctx.fill();
+    if(Math.abs(fvx)>0.03){
+      var dd=fvx>0?1:-1, ln=Math.min(44,Math.abs(fvx)*22+8);
+      ctx.strokeStyle=C.cyan; ctx.lineWidth=1.8;
+      ctx.beginPath(); ctx.moveTo(xp,py-18); ctx.lineTo(xp+dd*ln,py-18); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(xp+dd*(ln+5),py-18);
+      ctx.lineTo(xp+dd*(ln-2),py-22); ctx.lineTo(xp+dd*(ln-2),py-14);
+      ctx.closePath(); ctx.fillStyle=C.cyan; ctx.fill();
+    }
+    tip(ctx,S.name,padL,14,C.gold,11.5);
+  }
+
+  loop(cv,function(){
+    var S=SYS[key], f=S.f;
+    if(!locked){
+      x+=f(x)*0.016*1.7;
+      if(x>S.R) x=S.R; if(x<-S.R) x=-S.R;
+      if(Math.abs(f(x))<2e-3) locked=true;
+    }
+    draw();
+    var ro=$("#ro1");
+    if(ro) ro.innerHTML="x = <b>"+x.toFixed(3)+"</b>　速度 = <b>"+f(x).toFixed(3)+"</b>　"+(locked?"<b>已锁定</b>":"流动中");
+  });
+
+  function pickX(px){
+    var w=U.w(), S=SYS[key], padL=36, padR=16;
+    var v=(px-padL)/(w-padL-padR)*2*S.R-S.R;
+    x=Math.max(-S.R,Math.min(S.R,v)); locked=false;
+  }
+  cv.addEventListener("pointerdown",function(e){ cv.setPointerCapture(e.pointerId); pickX(e.offsetX); });
+  cv.addEventListener("pointermove",function(e){ if(e.buttons===1) pickX(e.offsetX); });
+
+  $$("#sys1 .chip").forEach(function(b){
+    b.addEventListener("click",function(){
+      $$("#sys1 .chip").forEach(function(o){o.classList.remove("on");});
+      b.classList.add("on");
+      key=b.getAttribute("data-k"); x=SYS[key].s; locked=false;
+    });
+  });
+  var r1=$("#reset1");
+  if(r1) r1.addEventListener("click",function(){ x=SYS[key].s; locked=false; });
+  window.NDC1={pick:function(i){
+    var ks=["lin","cubic","sin"];
+    key=ks[i]||"cubic"; x=SYS[key].s; locked=false;
+    $$("#sys1 .chip").forEach(function(o){ o.classList.toggle("on",o.getAttribute("data-k")===key); });
+  }};
+})();
+
+/* ================= 演示 02 · 钟摆相平面 ================= */
+(function(){
+  var cv=$("#cv2"); if(!cv) return;
+  var U=makeCanvas(cv), ctx=U.ctx;
+  var gam=0, th=2.2, om=0, trail=[], drag=false;
+  var TH=Math.PI*2+0.35, OMR=7;
+  function acc(th,om){ return -gam*om-Math.sin(th); }
+  function step(s,dt){
+    var k1=[s.om,acc(s.th,s.om)];
+    var k2=[s.om+dt/2*k1[1],acc(s.th+dt/2*k1[0],s.om+dt/2*k1[1])];
+    var k3=[s.om+dt/2*k2[1],acc(s.th+dt/2*k2[0],s.om+dt/2*k2[1])];
+    var k4=[s.om+dt*k3[1],acc(s.th+dt*k3[0],s.om+dt*k3[1])];
+    return {th:s.th+dt/6*(k1[0]+2*k2[0]+2*k3[0]+k4[0]),
+            om:s.om+dt/6*(k1[1]+2*k2[1]+2*k3[1]+k4[1])};
+  }
+  function toPx(v,w,h){ return [38+(v+TH)/(2*TH)*(w-56), 12+(OMR-v)/(2*OMR)*(h-48)]; }
+  function toVal(px,py,w,h){ return [(px-38)/(w-56)*2*TH-TH, OMR-(py-12)/(h-48)*2*OMR]; }
+
+  function draw(){
+    var w=U.w(), h=U.h();
+    ctx.clearRect(0,0,w,h);
+    ctx.strokeStyle=C.grid; ctx.lineWidth=1;
+    for(var gx=-Math.PI*2;gx<=Math.PI*2+0.01;gx+=Math.PI/2){
+      var p=toPx(gx,0,w,h);
+      ctx.beginPath(); ctx.moveTo(p[0],12); ctx.lineTo(p[0],h-36); ctx.stroke();
+    }
+    for(var gy=-6;gy<=6;gy+=2){
+      var q=toPx(0,gy,w,h);
+      ctx.strokeStyle=gy===0?"rgba(255,255,255,.18)":C.grid;
+      ctx.beginPath(); ctx.moveTo(38,q[1]); ctx.lineTo(w-18,q[1]); ctx.stroke();
+    }
+    for(var i=0;i<=16;i++){
+      for(var j=0;j<=10;j++){
+        var av=-TH+2*TH*i/16, ov=-OMR+2*OMR*j/10;
+        var dv=[ov,acc(av,ov)], norm=Math.hypot(dv[0],dv[1])||1;
+        var pt=toPx(av,ov,w,h);
+        var ex=dv[0]/norm*6, ey=-dv[1]/norm*6;
+        ctx.strokeStyle="rgba(75,87,104,.45)"; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.moveTo(pt[0]-ex/2,pt[1]-ey/2); ctx.lineTo(pt[0]+ex/2,pt[1]+ey/2); ctx.stroke();
+      }
+    }
+    if(trail.length>1){
+      ctx.beginPath();
+      for(var k=0;k<trail.length;k++){
+        var p2=toPx(trail[k][0],trail[k][1],w,h);
+        if(k) ctx.lineTo(p2[0],p2[1]); else ctx.moveTo(p2[0],p2[1]);
+      }
+      ctx.strokeStyle="rgba(98,208,255,.85)"; ctx.lineWidth=1.5; ctx.lineJoin="round"; ctx.stroke();
+    }
+    [[0,1],[-Math.PI,0],[Math.PI,0]].forEach(function(fp){
+      var p3=toPx(fp[0],0,w,h);
+      ctx.beginPath(); ctx.arc(p3[0],p3[1],fp[1]?5:4,0,Math.PI*2);
+      ctx.fillStyle=fp[1]?C.warm:"rgba(255,151,112,.45)"; ctx.fill();
+    });
+    var pc=toPx(th,om,w,h);
+    ctx.beginPath(); ctx.arc(pc[0],pc[1],5,0,Math.PI*2); ctx.fillStyle="#fff"; ctx.fill();
+    ctx.beginPath(); ctx.arc(pc[0],pc[1],2.6,0,Math.PI*2); ctx.fillStyle=C.cyan; ctx.fill();
+    tip(ctx,"ω",14,18,C.text,10.5);
+    tip(ctx,"θ",w-20,h-14,C.text,10.5,"right");
+    var ro=$("#ro2");
+    if(ro) ro.innerHTML="θ = <b>"+(th/Math.PI).toFixed(2)+"π</b>　ω = <b>"+om.toFixed(2)+
+      "</b>　能量 E = <b>"+(0.5*om*om+(1-Math.cos(th))).toFixed(2)+"</b>";
+  }
+  loop(cv,function(){
+    if(!drag){
+      for(var s=0;s<3;s++){ var n=step({th:th,om:om},0.008); th=n.th; om=n.om; }
+      if(th>TH){ th-=2*Math.PI; trail=[]; }
+      if(th<-TH){ th+=2*Math.PI; trail=[]; }
+      if(Math.abs(om)>OMR*1.6) om=Math.sign(om)*OMR*1.6;
+      trail.push([th,om]);
+      if(trail.length>1200) trail.shift();
+    }
+    draw();
+  });
+  cv.addEventListener("pointerdown",function(e){
+    drag=true; cv.setPointerCapture(e.pointerId);
+    var v=toVal(e.offsetX,e.offsetY,U.w(),U.h());
+    th=Math.max(-TH,Math.min(TH,v[0])); om=Math.max(-OMR,Math.min(OMR,v[1]));
+    trail=[[th,om]];
+  });
+  cv.addEventListener("pointermove",function(e){
+    if(!drag) return;
+    var v=toVal(e.offsetX,e.offsetY,U.w(),U.h());
+    th=Math.max(-TH,Math.min(TH,v[0])); om=Math.max(-OMR,Math.min(OMR,v[1]));
+    trail=[[th,om]];
+  });
+  window.addEventListener("pointerup",function(){ drag=false; });
+  var s2=$("#g2"), v2=$("#g2v");
+  if(s2) s2.addEventListener("input",function(){ gam=parseFloat(s2.value); v2.textContent=gam.toFixed(2); });
+  var rs2=$("#reset2");
+  if(rs2) rs2.addEventListener("click",function(){ th=2.2; om=0; trail=[[th,om]]; });
+  window.NDC2={setGamma:function(g){
+    gam=g; var s=$("#g2"), v=$("#g2v");
+    if(s) s.value=g;
+    if(v) v.textContent=g.toFixed(2);
+  }};
+})();
+
+/* ================= 演示 03 · 周期与振幅 ================= */
+(function(){
+  var cv=$("#cv3"); if(!cv) return;
+  var U=makeCanvas(cv), ctx=U.ctx;
+  var amp=20, t0=performance.now(), CURVE=null;
+  function Kint(k){
+    var n=240, hh=(Math.PI/2)/n, s=0;
+    for(var i=0;i<=n;i++){
+      var p=i*hh, wgt=(i===0||i===n)?1:(i%2?4:2);
+      s+=wgt/Math.sqrt(1-k*k*Math.sin(p)*Math.sin(p));
+    }
+    return s*hh/3;
+  }
+  function ratio(deg){
+    var k=Math.sin(deg*Math.PI/360);
+    if(k>0.999999) k=0.999999;
+    return (2/Math.PI)*Kint(k);
+  }
+  function draw(){
+    var w=U.w(), h=U.h();
+    ctx.clearRect(0,0,w,h);
+    var lw=Math.min(w*0.34,250);
+    var cx=lw/2, cy=44, L=Math.min(h-150,130);
+    var T=ratio(amp), Tvis=2.3;
+    var ang=amp*Math.PI/180*Math.cos(2*Math.PI*((performance.now()-t0)/1000)/Tvis);
+    ctx.strokeStyle="rgba(255,255,255,.14)"; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.arc(cx,cy,L,-Math.PI/2-amp*Math.PI/180,-Math.PI/2+amp*Math.PI/180); ctx.stroke();
+    ctx.strokeStyle="rgba(232,176,75,.5)"; ctx.lineWidth=1.6;
+    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+L*Math.sin(ang),cy+L*Math.cos(ang)); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx,cy,4,0,Math.PI*2); ctx.fillStyle="#8b95a4"; ctx.fill();
+    ctx.beginPath(); ctx.arc(cx+L*Math.sin(ang),cy+L*Math.cos(ang),10,0,Math.PI*2);
+    ctx.fillStyle=C.warm; ctx.fill();
+    tip(ctx,"θ₀ = "+amp+"°",cx,cy+L+34,C.gold,11.5,"center");
+
+    var x0=lw+24, x1=w-14, y0=26, y1=h-34;
+    var X=function(d){return x0+d/180*(x1-x0);};
+    var MX=ratio(179), Y=function(v){return y1-(v-1)/(MX-0.98)*(y1-y0);};
+    ctx.strokeStyle=C.grid; ctx.lineWidth=1;
+    for(var d=0;d<=180;d+=45){
+      ctx.beginPath(); ctx.moveTo(X(d),y0); ctx.lineTo(X(d),y1); ctx.stroke();
+      tip(ctx,d+"°",X(d),y1+15,C.text,9.5,"center");
+    }
+    [1,1.5,2,2.5,3,3.5].forEach(function(v){
+      if(v>MX+0.05) return;
+      ctx.strokeStyle=v===1?"rgba(98,208,255,.45)":C.grid;
+      ctx.beginPath(); ctx.moveTo(x0,Y(v)); ctx.lineTo(x1,Y(v)); ctx.stroke();
+      tip(ctx,v.toFixed(1),x0-6,Y(v)+3.5,C.text,9.5,"right");
+    });
+    ctx.strokeStyle="rgba(98,208,255,.85)"; ctx.lineWidth=1.4; ctx.setLineDash([5,5]);
+    ctx.beginPath(); ctx.moveTo(x0,Y(1)); ctx.lineTo(x1,Y(1)); ctx.stroke(); ctx.setLineDash([]);
+    if(!CURVE){ CURVE=[]; for(var q=2;q<=179;q+=1) CURVE.push([q,ratio(q)]); }
+    ctx.beginPath();
+    for(var kk=0;kk<CURVE.length;kk++){
+      var px=X(CURVE[kk][0]), py=Y(CURVE[kk][1]);
+      if(kk) ctx.lineTo(px,py); else ctx.moveTo(px,py);
+    }
+    ctx.strokeStyle=C.gold; ctx.lineWidth=2.2; ctx.stroke();
+    var pcx=X(amp), pcy=Y(ratio(amp));
+    ctx.beginPath(); ctx.arc(pcx,pcy,5.5,0,Math.PI*2); ctx.fillStyle="#fff"; ctx.fill();
+    ctx.beginPath(); ctx.arc(pcx,pcy,3,0,Math.PI*2); ctx.fillStyle=C.gold; ctx.fill();
+    var ro=$("#ro3");
+    if(ro) ro.innerHTML="T/T₀ = <b>"+ratio(amp).toFixed(3)+"</b>　偏差 <b>"+((ratio(amp)-1)*100).toFixed(1)+"%</b>";
+  }
+  loop(cv,draw);
+  var s3=$("#a3"), v3=$("#a3v");
+  if(s3) s3.addEventListener("input",function(){ amp=parseInt(s3.value,10); v3.textContent=amp+"°"; });
+})();
+
+/* ================= 演示 04 · 洛伦兹 ================= */
+(function(){
+  var cv=$("#cv4"); if(!cv) return;
+  var U=makeCanvas(cv), ctx=U.ctx;
+  var S=10, R=28, B=8/3;
+  var delta=1e-2, ang=0.35, t=0, paused=false, d0=delta;
+  var A={x:1,y:1,z:1}, Bp={x:1+delta,y:1,z:1}, ta=[], tb=[];
+  function deriv(p){ return [S*(p.y-p.x), p.x*(R-p.z)-p.y, p.x*p.y-B*p.z]; }
+  function rk4(p,dt){
+    var k1=deriv(p);
+    var k2=deriv({x:p.x+dt/2*k1[0],y:p.y+dt/2*k1[1],z:p.z+dt/2*k1[2]});
+    var k3=deriv({x:p.x+dt/2*k2[0],y:p.y+dt/2*k2[1],z:p.z+dt/2*k2[2]});
+    var k4=deriv({x:p.x+dt*k3[0],y:p.y+dt*k3[1],z:p.z+dt*k3[2]});
+    return {x:p.x+dt/6*(k1[0]+2*k2[0]+2*k3[0]+k4[0]),
+            y:p.y+dt/6*(k1[1]+2*k2[1]+2*k3[1]+k4[1]),
+            z:p.z+dt/6*(k1[2]+2*k2[2]+2*k3[2]+k4[2])};
+  }
+  function reset(){
+    A={x:1,y:1,z:1}; Bp={x:1+delta,y:1,z:1};
+    ta=[[A.x,A.y,A.z]]; tb=[[Bp.x,Bp.y,Bp.z]]; t=0;
+  }
+  function proj(p,w,h){
+    var cx=w*0.5, cy=h*0.54, s=Math.min(w,h)/44;
+    var X=p.x*Math.cos(ang)+p.y*Math.sin(ang);
+    var Y=p.x*Math.sin(ang)-p.y*Math.cos(ang);
+    return [cx+X*s*0.62, cy-(p.z-25)*s*0.62+Y*s*0.16];
+  }
+  function line(arr,color,alpha,width,w,h){
+    if(arr.length<2) return;
+    ctx.beginPath();
+    for(var i=0;i<arr.length;i++){
+      var p=proj({x:arr[i][0],y:arr[i][1],z:arr[i][2]},w,h);
+      if(i) ctx.lineTo(p[0],p[1]); else ctx.moveTo(p[0],p[1]);
+    }
+    ctx.strokeStyle=color; ctx.globalAlpha=alpha; ctx.lineWidth=width;
+    ctx.lineJoin="round"; ctx.stroke(); ctx.globalAlpha=1;
+  }
+  function draw(){
+    var w=U.w(), h=U.h();
+    ctx.clearRect(0,0,w,h);
+    var bg=ctx.createRadialGradient(w/2,h*0.55,10,w/2,h*0.55,Math.max(w,h)*0.6);
+    bg.addColorStop(0,"rgba(98,208,255,.06)"); bg.addColorStop(1,"rgba(0,0,0,0)");
+    ctx.fillStyle=bg; ctx.fillRect(0,0,w,h);
+    line(ta,"#3f6d86",0.45,1,w,h); line(tb,"#8a5443",0.4,1,w,h);
+    line(ta,C.cyan,0.95,1.4,w,h); line(tb,C.warm,0.95,1.4,w,h);
+    var pa=proj(A,w,h), pb=proj(Bp,w,h);
+    ctx.beginPath(); ctx.arc(pa[0],pa[1],4.5,0,Math.PI*2); ctx.fillStyle="#fff"; ctx.fill();
+    ctx.beginPath(); ctx.arc(pa[0],pa[1],2.4,0,Math.PI*2); ctx.fillStyle=C.cyan; ctx.fill();
+    ctx.beginPath(); ctx.arc(pb[0],pb[1],4.5,0,Math.PI*2); ctx.fillStyle="#fff"; ctx.fill();
+    ctx.beginPath(); ctx.arc(pb[0],pb[1],2.4,0,Math.PI*2); ctx.fillStyle=C.warm; ctx.fill();
+    var d=Math.hypot(A.x-Bp.x,A.y-Bp.y,A.z-Bp.z);
+    var ro=$("#ro4");
+    if(ro) ro.innerHTML="t = <b>"+t.toFixed(1)+"</b>　初始间隔 <b>"+d0.toExponential(0)+
+      "</b>　当前间隔 <b>"+d.toExponential(2)+"</b>　放大 <b>"+(d0>0?(d/d0).toFixed(0):"-")+"×</b>";
+  }
+  loop(cv,function(){
+    if(!paused){
+      for(var i=0;i<3;i++){
+        A=rk4(A,0.005); Bp=rk4(Bp,0.005); t+=0.005;
+        ta.push([A.x,A.y,A.z]); tb.push([Bp.x,Bp.y,Bp.z]);
+      }
+      if(ta.length>2000){ ta.splice(0,ta.length-2000); tb.splice(0,tb.length-2000); }
+      ang+=0.0022;
+    }
+    draw();
+  });
+  var s4=$("#d4"), v4=$("#d4v");
+  if(s4) s4.addEventListener("input",function(){
+    delta=Math.pow(10,parseFloat(s4.value)); d0=delta;
+    v4.textContent=delta.toExponential(0); reset();
+  });
+  var r4=$("#reset4");
+  if(r4) r4.addEventListener("click",reset);
+  cv.addEventListener("click",function(){ paused=!paused; });
+  cv.style.cursor="pointer";
+  reset();
+  window.NDC4={setDelta:function(d){
+    delta=d; d0=d;
+    var s=$("#d4"), v=$("#d4v");
+    if(s) s.value=Math.log10(d).toFixed(1);
+    if(v) v.textContent=d.toExponential(0);
+    reset();
+  }};
+})();
+
+/* ================= 小测 ================= */
+(function(){
+  var box=$("#quizbox"); if(!box) return;
+  var QS=[
+    {q:"dx/dt = x − x³ 有三个平衡点，哪一个不稳定？",
+     o:["x = −1","x = 0","x = 1","三个都不稳定"],a:1,
+     w:"f′(0)=1>0，稍微偏离就被推得更远（山顶）；f′(±1)=−2<0，两侧都汇进来（谷底）。"},
+    {q:"相图里的一条轨迹，代表什么？",
+     o:["某一时刻的状态","一群系统的分布","一个初值的全部演化历史","方程本身的形状"],a:2,
+     w:"一个点＝某一刻的状态；一条曲线＝从某个初值出发走出的完整历史。"},
+    {q:"混沌的「确定性」指的是？",
+     o:["结果可以精确预测","方程里没有随机项，初值决定唯一未来","轨道会重复自己","一定收敛到不动点"],a:1,
+     w:"确定性说的是规则里没有骰子，不是人能算准。敏感依赖让长期预测失效，这不矛盾。"},
+    {q:"振幅从 20° 推到 90°，周期会怎样？",
+     o:["几乎不变","缩短约 18%","变长约 18%","变长到 2 倍"],a:2,
+     w:"T=(4/ω₀)K(k)，k=sin(θ₀/2)。90° 时算出 T/T₀=1.1803；10° 以内误差只有 0.2%。"},
+    {q:"为什么「算不出解析解」不妨碍理解系统？",
+     o:["数值解总是精确的","相空间几何与能否求解无关，命运由图决定","解析解其实都存在","非线性系统不需要精确"],a:1,
+     w:"不问「t 时刻在哪」，而问「所有可能轨道被允许怎么走」。三体无闭式解，但结构照样能描述。"}
+  ];
+  var KEY="ndc1-quiz", DKEY="ndc1-done";
+  var saved={}, score=0, answered=0;
+  try{ saved=JSON.parse(localStorage.getItem(KEY)||"{}"); }catch(e){ saved={}; }
+
+  QS.forEach(function(item,qi){
+    var w=document.createElement("div"); w.className="q";
+    var stem=document.createElement("div"); stem.className="stem"; stem.textContent="Q"+(qi+1)+"　"+item.q;
+    var opts=document.createElement("div");
+    var fb=document.createElement("div"); fb.className="fb";
+    w.appendChild(stem); w.appendChild(opts); w.appendChild(fb);
+    item.o.forEach(function(txt,oi){
+      var d=document.createElement("div"); d.className="opt";
+      var k=document.createElement("span"); k.className="k"; k.textContent=String.fromCharCode(65+oi);
+      var s=document.createElement("span"); s.textContent=txt;
+      d.appendChild(k); d.appendChild(s);
+      d.addEventListener("click",function(){
+        if(opts.getAttribute("data-locked")==="1") return;
+        opts.setAttribute("data-locked","1");
+        var ok=oi===item.a;
+        Array.prototype.forEach.call(opts.children,function(c,ci){
+          c.classList.add("locked");
+          if(ci===item.a) c.classList.add("right");
+        });
+        if(!ok) d.classList.add("wrong");
+        fb.textContent=(ok?"答对了。":"再看一眼。")+item.w;
+        fb.className="fb show"+(ok?"":" bad");
+        answered++; if(ok) score++;
+        saved[qi]=oi;
+        try{ localStorage.setItem(KEY,JSON.stringify(saved)); }catch(e){}
+        paintScore();
+      });
+      opts.appendChild(d);
+    });
+    if(saved[qi]!==undefined){
+      var oi2=saved[qi];
+      opts.setAttribute("data-locked","1");
+      Array.prototype.forEach.call(opts.children,function(c,ci){
+        c.classList.add("locked");
+        if(ci===item.a) c.classList.add("right");
+      });
+      if(oi2!==item.a) opts.children[oi2].classList.add("wrong");
+      fb.textContent=(oi2===item.a?"答对了。":"再看一眼。")+item.w;
+      fb.className="fb show"+(oi2===item.a?"":" bad");
+    }
+    box.appendChild(w);
+  });
+  function paintScore(){
+    var el=$("#score"); if(!el) return;
+    if(!answered){ el.innerHTML="共 5 题 · 点选项立刻判对错"; return; }
+    el.innerHTML="已作答 <b>"+answered+"</b> / 5　答对 <b>"+score+"</b> 题　"+
+      (score===5?"全对，这一章过关了。":score>=3?"基本到位，错的那几道回看解析。":"建议回去把演示再做一遍。");
+  }
+  paintScore();
+  var chk=$("#doneChk"), boxD=$("#donebox");
+  try{ chk.checked=localStorage.getItem(DKEY)==="1"; }catch(e){}
+  if(chk) chk.addEventListener("change",function(){
+    try{ localStorage.setItem(DKEY,chk.checked?"1":"0"); }catch(e){}
+    if(boxD) boxD.style.background=chk.checked?"rgba(79,191,168,.16)":"";
+  });
+})();
+
+/* 四个演示都就绪后，把当前页（含步骤）对齐一次，保证首屏与第 1 步一致 */
+setStep(idx,steps[idx]||0);
+})();
+</script>
+
+</body>
+</html>

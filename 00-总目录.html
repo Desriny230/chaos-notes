@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>非线性动力学与混沌 · 讲义总目录</title>
+<style>
+:root{--bg:#080b10;--panel:#101822;--ink:#eee8dc;--ink2:#c3cad6;--mut:#8b95a4;--dim:#5c6775;
+  --gold:#e8b04b;--cyan:#62d0ff;--warm:#ff9770;--teal:#4fbfa8;--line:rgba(255,255,255,.10)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.8 "PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  min-height:100vh;padding:clamp(24px,5vw,64px) clamp(18px,4vw,48px) 60px;
+  background-image:radial-gradient(60% 50% at 50% 0%,rgba(43,76,126,.35),transparent 70%);}
+.wrap{max-width:1180px;margin:0 auto}
+.kicker{font:600 10.5px/1 var(--mono,"Consolas");letter-spacing:.3em;color:var(--gold);margin-bottom:18px}
+h1{font:700 clamp(26px,4.2vw,44px)/1.25 "Songti SC",SimSun,serif;color:#f6f1e6;letter-spacing:.01em}
+.sub{margin-top:14px;color:var(--mut);font-size:14.5px;max-width:46em}
+.meta{margin-top:20px;display:flex;flex-wrap:wrap;gap:9px}
+.meta span{font-size:11.5px;letter-spacing:.08em;color:var(--mut);border:1px solid var(--line);padding:6px 12px;border-radius:999px}
+.grid{margin-top:38px;display:grid;grid-template-columns:repeat(auto-fill,minmax(258px,1fr));gap:12px}
+a.card{display:block;text-decoration:none;color:inherit;background:rgba(255,255,255,.032);
+  border:1px solid var(--line);border-radius:14px;padding:18px 18px 16px;transition:.22s;position:relative;overflow:hidden}
+a.card:hover{background:rgba(255,255,255,.06);border-color:rgba(232,176,75,.5);transform:translateY(-3px)}
+a.card .n{font:700 10px/1 var(--mono,"Consolas");letter-spacing:.16em;color:var(--gold)}
+a.card h3{font:700 17px/1.4 "Songti SC",SimSun,serif;margin:9px 0 0;color:#f2ecdf}
+a.card .one{margin-top:7px;font-size:12.8px;line-height:1.7;color:var(--mut)}
+a.card .stat{margin-top:12px;font:500 10.5px/1 var(--mono,"Consolas");color:var(--dim);letter-spacing:.06em}
+a.card .stat b{color:var(--teal);font-weight:600}
+a.card::after{content:"";position:absolute;right:-40px;bottom:-40px;width:110px;height:110px;border-radius:50%;
+  background:radial-gradient(circle,rgba(232,176,75,.13),transparent 70%)}
+.foot{margin-top:44px;padding-top:22px;border-top:1px solid var(--line);color:var(--dim);font-size:12.5px;line-height:2}
+.foot b{color:var(--mut);font-weight:500}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="kicker">NONLINEAR DYNAMICS AND CHAOS · 全 12 章</div>
+  <h1>非线性动力学与混沌 · 学习讲义</h1>
+  <p class="sub">按 Strogatz 第 2 版的中文版重写：每章一屏一屏往下翻，公式逐条推导，图全部由数值计算生成。点任意一章开始。</p>
+  <div class="meta">
+    <span>12 章</span><span>272 页</span><span>60 张数值图</span><span>21 个可玩演示</span><span>28 篇完整推导</span><span>60 道自测</span>
+  </div>
+
+  <div class="grid">
+    <a class="card" href="01-概述.html"><div class="n">CH 01</div><h3>概述</h3>
+      <div class="one">先学会用眼睛看动力学：相图、流、确定性预测的极限</div>
+      <div class="stat">18 页 · <b>4</b> 图 · 4 演示 · 2 推导</div></a>
+    <a class="card" href="02-一维流.html"><div class="n">CH 02</div><h3>直线上的流</h3>
+      <div class="one">一条线能发生多少事：不动点、稳定性、势、一维不能振荡</div>
+      <div class="stat">26 页 · <b>7</b> 图 · 1 演示 · 2 推导</div></a>
+    <a class="card" href="03-分岔.html"><div class="n">CH 03</div><h3>分岔</h3>
+      <div class="one">参数一变，命运跳变：鞍结、跨临界、叉式与激光阈值</div>
+      <div class="stat">22 页 · <b>7</b> 图 · 1 演示 · 2 推导</div></a>
+    <a class="card" href="04-圆周上的流.html"><div class="n">CH 04</div><h3>圆上的流</h3>
+      <div class="one">锁相与阿诺德舌：萤火虫同步、约瑟夫森结的 I–V</div>
+      <div class="stat">24 页 · <b>5</b> 图 · 1 演示 · 3 推导</div></a>
+    <a class="card" href="05-线性系统.html"><div class="n">CH 05</div><h3>线性系统</h3>
+      <div class="one">迹—行列式平面上的六种命运，顺便聊聊恋爱</div>
+      <div class="stat">20 页 · <b>3</b> 图 · 1 演示 · 2 推导</div></a>
+    <a class="card" href="06-相平面.html"><div class="n">CH 06</div><h3>相平面</h3>
+      <div class="one">二维动物园：兔与羊、保守系统、钟摆、指数定理</div>
+      <div class="stat">21 页 · <b>4</b> 图 · 1 演示 · 2 推导</div></a>
+    <a class="card" href="07-极限环.html"><div class="n">CH 07</div><h3>极限环</h3>
+      <div class="one">自持振荡：怎么证明"这儿有个环"，怎么证明"这儿没有"</div>
+      <div class="stat">25 页 · <b>6</b> 图 · 2 演示 · 2 推导</div></a>
+    <a class="card" href="08-分岔再探.html"><div class="n">CH 08</div><h3>再探分岔</h3>
+      <div class="one">霍普夫、化学振荡、准周期与庞加莱映射</div>
+      <div class="stat">23 页 · <b>5</b> 图 · 2 演示 · 2 推导</div></a>
+    <a class="card" href="09-洛伦兹方程.html"><div class="n">CH 09</div><h3>洛伦兹方程</h3>
+      <div class="one">第一个奇怪吸引子：水车、蝴蝶、长暂态与混沌通信</div>
+      <div class="stat">25 页 · <b>5</b> 图 · 2 演示 · 2 推导</div></a>
+    <a class="card" href="10-一维映射.html"><div class="n">CH 10</div><h3>一维映射</h3>
+      <div class="one">倍周期级联与费根鲍姆常数：为什么 4.669 到处都是</div>
+      <div class="stat">24 页 · <b>4</b> 图 · 2 演示 · 2 推导</div></a>
+    <a class="card" href="11-分形.html"><div class="n">CH 11</div><h3>分形</h3>
+      <div class="one">维数可以不是整数：康托尔集、盒计数、关联维数</div>
+      <div class="stat">23 页 · <b>5</b> 图 · 2 演示 · 2 推导</div></a>
+    <a class="card" href="12-奇怪吸引子.html"><div class="n">CH 12</div><h3>奇怪吸引子</h3>
+      <div class="one">埃农、若斯勒、受迫双井，以及只有一列数据时怎么把吸引子长回来</div>
+      <div class="stat">21 页 · <b>5</b> 图 · 2 演示 · 2 推导</div></a>
+  </div>
+
+  <div class="foot">
+    <b>怎么翻</b>：滚轮、↑↓、空格或触屏上滑翻页；演示页连翻三次会切换三种参数。<br>
+    <b>怎么核</b>：每页右下角标的是对应原书节号（如 §2.4），可以对着书核；每章的图都由脚本算出，见 <code>_figs/gen_chNN.py</code>。<br>
+    <b>进度</b>：每章最后一页有「读完了」勾选框，存在本机浏览器里，换台电脑不会同步。
+  </div>
+</div>
+</body>
+</html>

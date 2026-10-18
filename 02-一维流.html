@@ -1,0 +1,1213 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>第 2 章 · 直线上的流（一维流）—— 非线性动力学与混沌</title>
+<style>
+/* ================= 0. 基础 ================= */
+:root{
+  --bg:#080b10; --bg2:#0e141d; --panel:#101822; --panel2:#0b1119;
+  --ink:#eee8dc; --ink2:#c3cad6; --mut:#8b95a4; --dim:#5c6775;
+  --gold:#e8b04b; --cyan:#62d0ff; --warm:#ff9770; --teal:#4fbfa8; --red:#d9534a;
+  --line:rgba(255,255,255,.10); --line2:rgba(255,255,255,.06);
+  --serif:"Source Han Serif SC","Noto Serif SC","Songti SC",SimSun,"STSong",serif;
+  --sans:"PingFang SC","HarmonyOS Sans SC","Microsoft YaHei","Hiragino Sans GB",system-ui,sans-serif;
+  --mono:"JetBrains Mono","Cascadia Code",Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--sans);
+  font-size:16px; line-height:1.85; overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4{font-family:var(--serif);font-weight:700;line-height:1.28;letter-spacing:.01em}
+em{font-style:normal;color:var(--gold)}
+::selection{background:rgba(232,176,75,.28)}
+
+/* ================= 1. 背景（全篇同一底色，只有缓慢呼吸的光） ================= */
+.bg{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.bg .orb{position:absolute;border-radius:50%;filter:blur(90px);opacity:.30;mix-blend-mode:screen}
+.bg .o1{width:52vw;height:52vw;left:-12vw;top:-14vw;
+  background:radial-gradient(circle,rgba(43,76,126,.9),transparent 66%);
+  animation:drift1 34s ease-in-out infinite alternate}
+.bg .o2{width:44vw;height:44vw;right:-10vw;bottom:-14vw;
+  background:radial-gradient(circle,rgba(150,62,44,.75),transparent 66%);
+  animation:drift2 42s ease-in-out infinite alternate}
+.bg .o3{width:30vw;height:30vw;left:44vw;top:38vh;opacity:.13;
+  background:radial-gradient(circle,rgba(232,176,75,.8),transparent 68%);
+  animation:drift1 28s ease-in-out infinite alternate-reverse}
+@keyframes drift1{from{transform:translate3d(0,0,0) scale(1)}to{transform:translate3d(4vw,3vh,0) scale(1.12)}}
+@keyframes drift2{from{transform:translate3d(0,0,0) scale(1.06)}to{transform:translate3d(-3vw,-4vh,0) scale(.96)}}
+.bg .mesh{position:absolute;inset:-10%;
+  background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);
+  background-size:72px 72px;
+  -webkit-mask-image:radial-gradient(62% 58% at 50% 45%,#000 20%,transparent 80%);
+  mask-image:radial-gradient(62% 58% at 50% 45%,#000 20%,transparent 80%);
+  animation:meshmove 60s linear infinite}
+@keyframes meshmove{to{transform:translate3d(-72px,-72px,0)}}
+
+/* ================= 2. 幻灯片容器 ================= */
+.deck{position:fixed;inset:0;z-index:2}
+.page{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  padding:clamp(24px,5vh,64px) clamp(20px,4vw,56px);
+  opacity:0;visibility:hidden;pointer-events:none;
+  transform:scale(1.015);filter:blur(7px);
+  transition:opacity .62s cubic-bezier(.4,0,.2,1),transform .72s cubic-bezier(.4,0,.2,1),
+             filter .62s cubic-bezier(.4,0,.2,1),visibility .62s;
+}
+.page.on{opacity:1;visibility:visible;transform:none;filter:none;pointer-events:auto;z-index:3}
+.page-inner{width:min(1140px,100%);max-height:100%;overflow:auto;overscroll-behavior:contain;
+  scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent}
+.page-inner::-webkit-scrollbar{width:6px}
+.page-inner::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:6px}
+
+/* 入场：逐级浮现（不是从下往上滑，而是轻微上浮+淡入） */
+.a{opacity:0;transform:translateY(16px);
+  transition:opacity .68s cubic-bezier(.2,.8,.3,1),transform .68s cubic-bezier(.2,.8,.3,1)}
+.page.on .a{opacity:1;transform:none}
+.page.on .a:nth-child(1){transition-delay:.05s}
+.page.on .a:nth-child(2){transition-delay:.11s}
+.page.on .a:nth-child(3){transition-delay:.17s}
+.page.on .a:nth-child(4){transition-delay:.23s}
+.page.on .a:nth-child(5){transition-delay:.29s}
+.page.on .a:nth-child(6){transition-delay:.35s}
+.page.on .a:nth-child(7){transition-delay:.41s}
+.page.on .a:nth-child(8){transition-delay:.47s}
+
+/* ================= 3. HUD ================= */
+.rail{position:fixed;top:0;left:0;height:2px;z-index:60;background:linear-gradient(90deg,var(--gold),var(--warm));
+  box-shadow:0 0 14px rgba(232,176,75,.55);transition:width .55s cubic-bezier(.4,0,.2,1)}
+.dots{position:fixed;right:clamp(12px,2vw,26px);top:50%;transform:translateY(-50%);z-index:60;
+  display:flex;flex-direction:column;gap:7px;align-items:flex-end}
+.dots button{appearance:none;border:0;background:transparent;padding:3px;cursor:pointer;display:flex;align-items:center;gap:8px}
+.dots i{display:block;width:14px;height:2px;background:rgba(255,255,255,.20);transition:.3s;border-radius:2px}
+.dots button:hover i{background:rgba(255,255,255,.45);width:20px}
+.dots button.on i{background:var(--gold);width:26px}
+.counter{position:fixed;right:clamp(12px,2vw,26px);bottom:18px;z-index:60;
+  font:600 11.5px/1 var(--mono);letter-spacing:.18em;color:var(--dim)}
+.counter b{color:var(--gold)}
+.where{position:fixed;left:clamp(14px,2.4vw,30px);bottom:18px;z-index:60;
+  font:500 11.5px/1.6 var(--sans);letter-spacing:.14em;color:var(--dim);
+  max-width:44vw;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.where b{color:var(--mut);font-weight:500}
+.tip{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:60;
+  font:500 11.5px/1 var(--sans);letter-spacing:.2em;color:var(--dim);
+  display:flex;align-items:center;gap:9px;transition:opacity .5s}
+.tip i{width:5px;height:5px;border-radius:50%;background:var(--gold);animation:blip 1.7s infinite}
+@keyframes blip{0%,100%{opacity:.25}50%{opacity:1}}
+.tip.hide{opacity:0;pointer-events:none}
+
+/* ================= 4. 版式组件 ================= */
+.kicker{font:600 10.5px/1 var(--sans);letter-spacing:.3em;color:var(--gold);
+  display:flex;align-items:center;gap:12px;margin-bottom:20px;text-transform:uppercase}
+.kicker::before{content:"";width:34px;height:1px;background:linear-gradient(90deg,var(--gold),transparent)}
+h2{font-size:clamp(24px,3.4vw,40px);color:#f4eee2;margin-bottom:18px;text-wrap:balance}
+.p{font-size:clamp(14.6px,1.15vw,16.4px);line-height:1.95;color:var(--ink2);margin-bottom:.95em}
+.p strong{color:#f6f1e5;font-weight:600;background:linear-gradient(transparent 64%,rgba(232,176,75,.30) 0);padding:0 1px}
+.p b{color:#f6f1e5}
+.pull{border-left:2px solid var(--gold);padding-left:18px;margin:22px 0;
+  font-family:var(--serif);font-size:clamp(15px,1.5vw,19px);line-height:1.8;color:#efe6d2}
+.pull cite{display:block;font-family:var(--sans);font-size:11.5px;color:var(--dim);font-style:normal;margin-top:8px;letter-spacing:.08em}
+.split{display:grid;grid-template-columns:1.06fr .94fr;gap:clamp(22px,4vw,60px);align-items:center}
+.split.rev{grid-template-columns:.94fr 1.06fr}
+.center{text-align:center}
+.fig{background:rgba(255,255,255,.028);border:1px solid var(--line2);border-radius:18px;padding:16px}
+.fig svg{display:block;width:100%;height:auto}
+.figcap{margin-top:10px;font-size:12px;line-height:1.7;color:var(--dim)}
+.card{background:rgba(255,255,255,.032);border:1px solid var(--line2);border-radius:16px;padding:20px 22px}
+.card h4{font-size:15.5px;color:#f2ecdf;margin-bottom:9px}
+.card p{font-size:13.6px;line-height:1.85;color:var(--mut)}
+.chips{display:flex;flex-wrap:wrap;gap:9px;margin-top:22px}
+.chips span{font-size:11.5px;letter-spacing:.08em;color:var(--mut);
+  border:1px solid var(--line);padding:6px 12px;border-radius:999px}
+
+/* 演示台 */
+.demo{background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.015));
+  border:1px solid var(--line);border-radius:18px;padding:14px;position:relative}
+.demo::before{content:"可玩";position:absolute;top:-9px;left:18px;font:600 9.5px/1 var(--sans);
+  letter-spacing:.24em;color:#0a0d12;background:var(--gold);padding:4px 8px;border-radius:4px}
+.demo canvas{display:block;width:100%;border-radius:12px;background:#05070b;touch-action:none;cursor:crosshair}
+.ctrls{display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin-top:12px}
+.chip{appearance:none;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.03);
+  color:#c3cbd8;font:500 11.5px/1 var(--mono);padding:7px 11px;border-radius:999px;cursor:pointer;transition:.18s}
+.chip:hover{background:rgba(255,255,255,.09);color:#fff}
+.chip.on{background:var(--gold);color:#0a0d12;border-color:var(--gold);font-weight:700}
+.btn{appearance:none;border:1px solid rgba(255,255,255,.18);background:transparent;color:#dfe6ef;
+  font:500 11.5px/1 var(--sans);padding:8px 13px;border-radius:8px;cursor:pointer;letter-spacing:.05em}
+.btn:hover{background:rgba(255,255,255,.08)}
+.slider{display:flex;align-items:center;gap:9px;font:500 11.5px/1 var(--mono);color:var(--mut)}
+.slider input[type=range]{appearance:none;width:clamp(100px,16vw,170px);height:3px;border-radius:3px;
+  background:rgba(255,255,255,.18);outline:none}
+.slider input[type=range]::-webkit-slider-thumb{appearance:none;width:12px;height:12px;border-radius:50%;
+  background:var(--gold);cursor:pointer;box-shadow:0 0 0 3px rgba(232,176,75,.2)}
+.slider b{color:var(--gold);font-weight:600;min-width:3.2em;display:inline-block}
+.readout{font:500 11.5px/1.7 var(--mono);color:var(--dim);margin-top:9px}
+.readout b{color:var(--teal);font-weight:600}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:9px;font:500 11px/1 var(--sans);color:var(--dim)}
+.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+
+/* 步骤文字（演示页右侧） */
+.steps{position:relative;min-height:clamp(240px,40vh,330px)}
+.step{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;
+  opacity:0;transform:translateY(14px);transition:opacity .5s,transform .5s;pointer-events:none}
+.step.on{opacity:1;transform:none;pointer-events:auto}
+.snum{font:700 10px/1 var(--mono);letter-spacing:.24em;color:var(--gold);margin-bottom:13px}
+.step h3{font-family:var(--serif);font-size:clamp(16px,1.85vw,22px);color:#f3eddf;margin-bottom:10px;line-height:1.5}
+.step p{font-size:13.8px;line-height:1.9;color:var(--mut)}
+.step p strong{color:#f0e7d5;font-weight:600}
+.sdots{display:flex;gap:6px;margin-top:18px}
+.sdots i{width:15px;height:2px;background:rgba(255,255,255,.16);transition:.3s}
+.sdots i.on{background:var(--gold);width:24px}
+
+/* 折叠 */
+details{border-radius:14px;overflow:hidden;border:1px solid var(--line2);background:rgba(255,255,255,.025)}
+details>summary{cursor:pointer;list-style:none;padding:13px 18px;font:600 13px/1.6 var(--sans);color:#e6dfd0;
+  display:flex;align-items:center;gap:10px}
+details>summary::-webkit-details-marker{display:none}
+details>summary::after{content:"+";margin-left:auto;color:var(--gold);font-weight:400;font-size:16px;transition:.3s}
+details[open]>summary::after{transform:rotate(45deg)}
+details .body{padding:0 20px 18px;font-size:13.6px;line-height:1.95;color:var(--mut)}
+details .body p{margin-bottom:.7em}
+details .body b{color:#f0e7d5}
+.tag{font:700 9.5px/1 var(--mono);letter-spacing:.14em;background:rgba(232,176,75,.16);
+  color:var(--gold);padding:4px 7px;border-radius:4px}
+.tag.blue{background:rgba(98,208,255,.14);color:var(--cyan)}
+.formula{display:block;text-align:center;font-family:var(--serif);font-size:16px;color:#f0e7d5;
+  padding:11px 8px;margin:11px 0;background:rgba(255,255,255,.04);border-radius:9px;letter-spacing:.01em}
+code{font:500 12.5px/1.4 var(--mono);background:rgba(255,255,255,.07);padding:2px 6px;border-radius:4px;color:#e7dfd0}
+
+/* 推导页 */
+.proofs{font-size:12.6px;line-height:1.9}
+.proofs .formula{font-size:14.5px;margin:9px 0;padding:9px 6px}
+@media(min-width:1180px){
+  .proofs{columns:2;column-gap:34px;column-rule:1px solid rgba(255,255,255,.07)}
+  .proofs>p,.proofs>.formula{break-inside:avoid}
+}
+.stepnum{color:var(--cyan);font-weight:700;font-family:var(--mono);font-size:12px;margin-right:6px}
+
+/* 章卡 */
+.map{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-top:20px}
+.mcard{background:rgba(255,255,255,.03);border:1px solid var(--line2);border-radius:12px;padding:12px 13px;
+  cursor:pointer;transition:.22s}
+.mcard:hover{background:rgba(255,255,255,.06);border-color:rgba(232,176,75,.45);transform:translateY(-2px)}
+.mcard .n{font:700 9.5px/1 var(--mono);color:var(--gold);letter-spacing:.14em}
+.mcard h5{font-family:var(--serif);font-size:14px;margin:7px 0 0;color:#f0eade;font-weight:700}
+.mcard .one{font-size:11.5px;color:var(--dim);line-height:1.6;margin-top:5px}
+.mcard.here{border-color:rgba(232,176,75,.6);background:rgba(232,176,75,.10)}
+
+/* 小测 */
+.qs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.q{background:rgba(255,255,255,.028);border:1px solid var(--line2);border-radius:13px;padding:14px 16px}
+.q .stem{font-size:13px;line-height:1.7;color:#ece5d7;margin-bottom:9px;font-weight:500}
+.opt{display:flex;gap:8px;align-items:flex-start;padding:7px 10px;border:1px solid var(--line2);
+  border-radius:8px;cursor:pointer;font-size:12.3px;line-height:1.6;color:#b9c2cf;margin-bottom:6px;transition:.16s}
+.opt:hover{background:rgba(255,255,255,.05)}
+.opt .k{font:700 10.5px/1.5 var(--mono);color:var(--dim);flex:none}
+.opt.right{border-color:rgba(79,191,168,.7);background:rgba(79,191,168,.12);color:#d8f5ec}
+.opt.wrong{border-color:rgba(217,83,74,.65);background:rgba(217,83,74,.12);color:#ffd7d2}
+.opt.locked{cursor:default}
+.fb{font-size:11.6px;line-height:1.7;color:var(--teal);margin-top:4px;display:none}
+.fb.show{display:block}
+.fb.bad{color:#ffb4a6}
+.score{display:flex;align-items:center;gap:16px;margin-top:14px;font-size:12.5px;color:var(--dim);flex-wrap:wrap}
+.score b{color:var(--gold);font-size:17px;font-family:var(--serif)}
+.done{display:flex;align-items:center;gap:12px;margin-top:12px;padding:11px 14px;
+  border:1px dashed rgba(79,191,168,.45);border-radius:12px;background:rgba(79,191,168,.06);cursor:pointer}
+.done input{appearance:none;width:20px;height:20px;border:2px solid var(--teal);border-radius:6px;
+  flex:none;cursor:pointer;position:relative;background:transparent}
+.done input:checked{background:var(--teal)}
+.done input:checked::after{content:"✓";position:absolute;inset:0;color:#08120f;font-size:13px;
+  display:flex;align-items:center;justify-content:center;font-weight:700}
+.done span{font-size:12.5px;color:#a9d9cf}
+
+/* ================= 5. 响应式 ================= */
+@media(max-width:980px){
+  .split,.split.rev{grid-template-columns:1fr;gap:20px}
+  .map{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .qs{grid-template-columns:1fr}
+  .dots{display:none}
+  .where{display:none}
+}
+@media(max-width:640px){
+  body{font-size:15px}
+  .page{padding:18px 16px}
+  .steps{min-height:0}
+  .step{position:static;opacity:1;transform:none;pointer-events:auto;margin-bottom:16px}
+  .step:last-child{margin-bottom:0}
+  .tip{display:none}
+}
+@media(prefers-reduced-motion:reduce){
+  .a{opacity:1;transform:none}
+  .bg .orb,.bg .mesh{animation:none}
+  .page{transition:opacity .2s}
+}
+
+/* 页脚角标：对应原书节号 */
+.pfoot{position:absolute;right:clamp(20px,4vw,56px);bottom:12px;font:11px/1 var(--mono);
+  color:var(--dim);opacity:.8;letter-spacing:.06em;pointer-events:none}
+</style>
+</head>
+<body>
+
+<div class="bg" aria-hidden="true">
+  <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+  <div class="mesh"></div>
+</div>
+
+<div class="rail" id="rail"></div>
+<nav class="dots" id="dots" aria-label="页面导航"></nav>
+<div class="where" id="where"></div>
+<div class="counter" id="counter"><b>01</b> / 18</div>
+<div class="tip" id="tip"><i></i>滚动滚轮 · 或按 ↓ / 空格 翻页</div>
+
+<main class="deck" id="deck">
+  <!-- ========== 01 封面 ========== -->
+  <section class="page" data-title="封面 · 一维流">
+    <div class="page-inner center">
+      <div class="a kicker">CH.02 · FLOWS ON THE LINE</div>
+      <h2 class="a" style="font-size:clamp(30px,4.6vw,56px)">一维流<br><span style="font-size:.52em;color:var(--mut);letter-spacing:.04em">直线上的流 · Flows on the Line</span></h2>
+      <p class="a p" style="max-width:36em;margin:20px auto 0;color:var(--mut)">状态只剩一个数的时候，命运全写在 <em>f(x)</em> 的符号里。<br>你不解方程，也能说出它去哪儿、走多快、什么时候到。</p>
+      <div class="a chips" style="justify-content:center">
+        <span>不动点</span><span>渐近稳定</span><span>逻辑斯谛</span><span>线性化判据</span><span>势能景观</span><span>欧拉法 / RK4</span>
+      </div>
+    </div>
+    <div class="pfoot">—</div>
+  </section>
+
+  <!-- ========== 02 本章问题 ========== -->
+  <section class="page" data-title="不解方程，能知道结局吗">
+    <div class="page-inner">
+      <div class="a kicker">THE QUESTION · 本章要回答什么</div>
+      <h2 class="a">不解方程，能知道结局吗？</h2>
+      <p class="a p">第 1 章已经付过账了：三体没有解析解，摆也没有。可我们还是想知道它会怎样。这一章把问题缩到最小——状态只有一个实数 <em>x</em>，方程只有一个 <em>ẋ</em> = <em>f(x)</em>——看看在这么小的世界里，"预测"能不能不靠计算。</p>
+      <div class="split" style="margin-top:18px;gap:clamp(16px,2.4vw,34px)">
+        <div class="a card">
+          <h4>三个问题，只靠 f 的形状回答</h4>
+          <p><strong>① 它会停在哪儿？</strong>找 <em>f(x*)</em> = 0 的点。<br>
+             <strong>② 停下之后，被推一把还回得来吗？</strong>看该点的斜率。<br>
+             <strong>③ 从这儿出发，多久到那儿？</strong>看 |<em>f</em>| 的大小，或者看势能落差。</p>
+        </div>
+        <div class="a card" style="border-color:rgba(255,151,112,.28)">
+          <h4 style="color:#ffc0a8">但每一个答案都有边界</h4>
+          <p>有些 <em>f</em> 连「从初值出发只有一条命运」都保证不了；<br>
+             有些解活不到你以为的那个时刻；<br>
+             有些不动点，一阶导数给出的答案干脆是空的。</p>
+        </div>
+      </div>
+      <p class="a p" style="margin-top:20px">这三个"但是"就是本章后半程的主角。读完你该能拿到一样东西：<strong>看见方程就能画出相图，看见相图就能说出命运</strong>——不用求积分。</p>
+    </div>
+    <div class="pfoot">§2.0 引言</div>
+  </section>
+
+  <!-- ========== 03 §2.1 几何的思维方式 ========== -->
+  <section class="page" data-title="把方程画成一条线">
+    <div class="page-inner">
+      <div class="split">
+        <div>
+          <div class="a kicker">§2.1 · 几何的思维方式</div>
+          <h2 class="a">把方程画成一条线</h2>
+          <p class="a p">一维流（flow on the line）的定义是一句话：状态是一个实数 <em>x(t)</em>，它的变化率只依赖它自己，不显含时间，也不依赖别的东西。</p>
+          <span class="a formula">ẋ = f(x)</span>
+          <p class="a p">别把它当方程看，当<strong>图</strong>看。画出 <em>y</em> = <em>f(x)</em> 的曲线，再把 <em>x</em> 轴想成一条河：<em>f(x)</em> &gt; 0 的河段向右流，&lt; 0 的河段向左流，|<em>f(x)</em>| 只决定流得多快。</p>
+          <p class="a p">于是"解一条曲线"变成了"看一条线的高低"。你不需要积分，也能说出每条初值的去向——这是本书全部方法的原型。</p>
+        </div>
+        <div class="a fig">
+          <!--FIG:A-->
+<svg viewBox="0 0 480 320" role="img" aria-label="一族一维流：f 曲线与数轴上的箭头"><line x1="44.0" y1="179.8" x2="456.0" y2="179.8" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="44.0" y1="147.4" x2="456.0" y2="147.4" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="44.0" y1="115.0" x2="456.0" y2="115.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="44.0" y1="82.6" x2="456.0" y2="82.6" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="44.0" y1="50.2" x2="456.0" y2="50.2" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="21.1" y1="34.0" x2="21.1" y2="196.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="97.4" y1="34.0" x2="97.4" y2="196.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="173.7" y1="34.0" x2="173.7" y2="196.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="250.0" y1="34.0" x2="250.0" y2="196.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="326.3" y1="34.0" x2="326.3" y2="196.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="402.6" y1="34.0" x2="402.6" y2="196.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="478.9" y1="34.0" x2="478.9" y2="196.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="44.0" y1="115.0" x2="460.0" y2="115.0" stroke="rgba(255,255,255,.22)" stroke-width="1.2"/><line x1="250.0" y1="196.0" x2="250.0" y2="30.0" stroke="rgba(255,255,255,.22)" stroke-width="1.2"/><text x="454.0" y="109.0" fill="#8b95a4" font-size="11" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">x</text><text x="256.0" y="38.0" fill="#8b95a4" font-size="11" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">f(x)</text><path d="M44.0 43.0 L45.6 46.0 L47.2 48.9 L48.8 51.8 L50.3 54.6 L51.9 57.4 L53.5 60.1 L55.1 62.7 L56.7 65.3 L58.3 67.9 L59.8 70.4 L61.4 72.8 L63.0 75.2 L64.6 77.5 L66.2 79.8 L67.8 82.0 L69.4 84.2 L70.9 86.3 L72.5 88.4 L74.1 90.4 L75.7 92.4 L77.3 94.4 L78.9 96.3 L80.4 98.1 L82.0 99.9 L83.6 101.7 L85.2 103.4 L86.8 105.0 L88.4 106.6 L90.0 108.2 L91.5 109.7 L93.1 111.2 L94.7 112.6 L96.3 114.0 L97.9 115.4 L99.5 116.7 L101.0 118.0 L102.6 119.2 L104.2 120.4 L105.8 121.6 L107.4 122.7 L109.0 123.7 L110.6 124.8 L112.1 125.8 L113.7 126.7 L115.3 127.6 L116.9 128.5 L118.5 129.4 L120.1 130.2 L121.6 130.9 L123.2 131.7 L124.8 132.4 L126.4 133.1 L128.0 133.7 L129.6 134.3 L131.2 134.9 L132.7 135.4 L134.3 135.9 L135.9 136.4 L137.5 136.8 L139.1 137.2 L140.7 137.6 L142.2 137.9 L143.8 138.3 L145.4 138.5 L147.0 138.8 L148.6 139.0 L150.2 139.2 L151.8 139.4 L153.3 139.6 L154.9 139.7 L156.5 139.8 L158.1 139.9 L159.7 139.9 L161.3 139.9 L162.8 139.9 L164.4 139.9 L166.0 139.9 L167.6 139.8 L169.2 139.7 L170.8 139.6 L172.4 139.4 L173.9 139.3 L175.5 139.1 L177.1 138.9 L178.7 138.7 L180.3 138.4 L181.9 138.2 L183.4 137.9 L185.0 137.6 L186.6 137.3 L188.2 136.9 L189.8 136.6 L191.4 136.2 L193.0 135.8 L194.5 135.4 L196.1 135.0 L197.7 134.6 L199.3 134.2 L200.9 133.7 L202.5 133.2 L204.0 132.7 L205.6 132.2 L207.2 131.7 L208.8 131.2 L210.4 130.7 L212.0 130.1 L213.6 129.6 L215.1 129.0 L216.7 128.5 L218.3 127.9 L219.9 127.3 L221.5 126.7 L223.1 126.1 L224.6 125.5 L226.2 124.8 L227.8 124.2 L229.4 123.6 L231.0 122.9 L232.6 122.3 L234.2 121.7 L235.7 121.0 L237.3 120.3 L238.9 119.7 L240.5 119.0 L242.1 118.4 L243.7 117.7 L245.2 117.0 L246.8 116.3 L248.4 115.7 L250.0 115.0 L251.6 114.3 L253.2 113.7 L254.8 113.0 L256.3 112.3 L257.9 111.6 L259.5 111.0 L261.1 110.3 L262.7 109.7 L264.3 109.0 L265.8 108.3 L267.4 107.7 L269.0 107.1 L270.6 106.4 L272.2 105.8 L273.8 105.2 L275.4 104.5 L276.9 103.9 L278.5 103.3 L280.1 102.7 L281.7 102.1 L283.3 101.5 L284.9 101.0 L286.4 100.4 L288.0 99.9 L289.6 99.3 L291.2 98.8 L292.8 98.3 L294.4 97.8 L296.0 97.3 L297.5 96.8 L299.1 96.3 L300.7 95.8 L302.3 95.4 L303.9 95.0 L305.5 94.6 L307.0 94.2 L308.6 93.8 L310.2 93.4 L311.8 93.1 L313.4 92.7 L315.0 92.4 L316.6 92.1 L318.1 91.8 L319.7 91.6 L321.3 91.3 L322.9 91.1 L324.5 90.9 L326.1 90.7 L327.6 90.6 L329.2 90.4 L330.8 90.3 L332.4 90.2 L334.0 90.1 L335.6 90.1 L337.2 90.1 L338.7 90.1 L340.3 90.1 L341.9 90.1 L343.5 90.2 L345.1 90.3 L346.7 90.4 L348.2 90.6 L349.8 90.8 L351.4 91.0 L353.0 91.2 L354.6 91.5 L356.2 91.7 L357.8 92.1 L359.3 92.4 L360.9 92.8 L362.5 93.2 L364.1 93.6 L365.7 94.1 L367.3 94.6 L368.8 95.1 L370.4 95.7 L372.0 96.3 L373.6 96.9 L375.2 97.6 L376.8 98.3 L378.4 99.1 L379.9 99.8 L381.5 100.6 L383.1 101.5 L384.7 102.4 L386.3 103.3 L387.9 104.2 L389.4 105.2 L391.0 106.3 L392.6 107.3 L394.2 108.4 L395.8 109.6 L397.4 110.8 L399.0 112.0 L400.5 113.3 L402.1 114.6 L403.7 116.0 L405.3 117.4 L406.9 118.8 L408.5 120.3 L410.0 121.8 L411.6 123.4 L413.2 125.0 L414.8 126.6 L416.4 128.3 L418.0 130.1 L419.6 131.9 L421.1 133.7 L422.7 135.6 L424.3 137.6 L425.9 139.6 L427.5 141.6 L429.1 143.7 L430.6 145.8 L432.2 148.0 L433.8 150.2 L435.4 152.5 L437.0 154.8 L438.6 157.2 L440.2 159.6 L441.7 162.1 L443.3 164.7 L444.9 167.3 L446.5 169.9 L448.1 172.6 L449.7 175.4 L451.2 178.2 L452.8 181.1 L454.4 184.0 L456.0 187.0" fill="none" stroke="#e8b04b" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round"/><text x="46.0" y="36.0" fill="#e8b04b" font-size="11.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start" font-weight="700">ẋ = x − x³</text><line x1="44.0" y1="252.0" x2="460.0" y2="252.0" stroke="rgba(255,255,255,.26)" stroke-width="1.4"/><text x="454.0" y="243.0" fill="#8b95a4" font-size="11" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">x</text><line x1="59.3" y1="252.0" x2="74.8" y2="252.0" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="74.8" y1="252.0" x2="70.4" y2="248.9" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="74.8" y1="252.0" x2="70.4" y2="255.1" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="138.6" y1="252.0" x2="128.5" y2="252.0" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="128.5" y1="252.0" x2="132.9" y2="248.9" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="128.5" y1="252.0" x2="132.9" y2="255.1" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="178.3" y1="252.0" x2="167.8" y2="252.0" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="167.8" y1="252.0" x2="172.2" y2="248.9" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="167.8" y1="252.0" x2="172.2" y2="255.1" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="218.0" y1="252.0" x2="209.9" y2="252.0" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="209.9" y1="252.0" x2="214.3" y2="248.9" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="209.9" y1="252.0" x2="214.3" y2="255.1" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="297.3" y1="252.0" x2="306.5" y2="252.0" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="306.5" y1="252.0" x2="302.1" y2="248.9" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="306.5" y1="252.0" x2="302.1" y2="255.1" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="337.0" y1="252.0" x2="347.7" y2="252.0" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="347.7" y1="252.0" x2="343.3" y2="248.9" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="347.7" y1="252.0" x2="343.3" y2="255.1" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="376.7" y1="252.0" x2="385.5" y2="252.0" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="385.5" y1="252.0" x2="381.1" y2="248.9" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="385.5" y1="252.0" x2="381.1" y2="255.1" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="416.3" y1="252.0" x2="408.3" y2="252.0" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="408.3" y1="252.0" x2="412.7" y2="248.9" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="408.3" y1="252.0" x2="412.7" y2="255.1" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><circle cx="97.4" cy="252.0" r="5.4" fill="#ff9770" stroke="#ff9770" stroke-width="1.4"/><text x="97.4" y="240.0" fill="#8b95a4" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">−1</text><text x="97.4" y="278.0" fill="#ff9770" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">稳定</text><text x="97.4" y="294.0" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">谷底</text><circle cx="250.0" cy="252.0" r="5.4" fill="#080b10" stroke="#5c6775" stroke-width="1.6"/><text x="250.0" y="240.0" fill="#8b95a4" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">0</text><text x="250.0" y="278.0" fill="#5c6775" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">不稳</text><text x="250.0" y="294.0" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">山顶</text><circle cx="402.6" cy="252.0" r="5.4" fill="#ff9770" stroke="#ff9770" stroke-width="1.4"/><text x="402.6" y="240.0" fill="#8b95a4" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">1</text><text x="402.6" y="278.0" fill="#ff9770" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">稳定</text><text x="402.6" y="294.0" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">谷底</text><text x="44.0" y="315.0" fill="#5c6775" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">箭头指哪，状态就往哪走；箭头长度＝速度大小。</text></svg>
+<!--END:A-->
+          <div class="figcap">上：<em>f(x)</em> = <em>x</em> − <em>x</em>³ 的曲线。下：同一条数轴上的流向箭头，长度正比于 |<em>f</em>|。填实的点是"汇"，空心点是"源"。</div>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§2.1 几何的思维方式</div>
+  </section>
+
+  <!-- ========== 04 §2.1 读图三件事 ========== -->
+  <section class="page" data-title="三个动作，读完一张相图">
+    <div class="page-inner">
+      <div class="a kicker">HOW TO READ · 读图三件事</div>
+      <h2 class="a">三个动作，读完一张相图</h2>
+      <p class="a p"><strong>一、找零点。</strong><em>f(x*)</em> = 0 处画一个点，那叫不动点（fixed point），也叫平衡点、定态。系统停在那里就不动了，而且"停住"是方程本身允许的，不是近似。</p>
+      <p class="a p"><strong>二、看符号。</strong>相邻两个零点之间 <em>f</em> 的符号不变（否则中间还有零点），所以每一段只有一种流向。<em>x(t)</em> 在段内严格单调：要么一直增，要么一直减，绝不回头。</p>
+      <p class="a p"><strong>三、看斜率。</strong>零点处斜率为负 → 两侧都往这儿汇；为正 → 两侧都往外推；恰为零 → 一阶信息用完了，得换法子（§2.4 末尾专讲）。</p>
+      <div class="a pull">一维流里没有"绕一圈回来"这回事：零点把线切成几段，每段只有一条出路——所以一维系统只会停住，或者跑掉，不会振荡。<cite>证明在 §2.6。要振荡，至少需要两个维度：一个存位移，一个存速度（第 6 章）。</cite></div>
+    </div>
+    <div class="pfoot">§2.1 几何的思维方式</div>
+  </section>
+
+  <!-- ========== 05 §2.2 不动点与稳定性 ========== -->
+  <section class="page" data-title="稳定，是一个带邻域的承诺">
+    <div class="page-inner">
+      <div class="a kicker">§2.2 · 不动点与稳定性</div>
+      <h2 class="a">稳定，是一个带邻域的承诺</h2>
+      <p class="a p">"稳定"这两个字最容易被说糊。它不是"看起来不动"，而是两句可以逐字检查的承诺。</p>
+      <div class="split" style="margin-top:14px">
+        <div class="a card" style="border-color:rgba(79,191,168,.30)">
+          <h4 style="color:#a9e6d8">稳定（Lyapunov stable，李雅普诺夫稳定）</h4>
+          <p>对任意容差 <em>ε</em> &gt; 0，都存在 <em>δ</em> &gt; 0，使得只要 |<em>x</em>₀ − <em>x*</em>| &lt; <em>δ</em>，就有 |<em>x(t)</em> − <em>x*</em>| &lt; <em>ε</em> 对<strong>所有</strong> <em>t</em> &gt; 0 成立。<br>翻译：起步够近，就永远不会走远。</p>
+        </div>
+        <div class="a card" style="border-color:rgba(232,176,75,.32)">
+          <h4 style="color:#f3d79a">渐近稳定（asymptotically stable）</h4>
+          <p>它是稳定的，<strong>并且</strong>存在一个邻域，里面任何初值都满足 <em>x(t)</em> → <em>x*</em>（<em>t</em> → ∞）。<br>翻译：不但不跑，还真的靠过去。</p>
+        </div>
+      </div>
+      <p class="a p" style="margin-top:18px">注意：<strong>"稳定"不等于"吸引"</strong>。这两个性质要到二维以上的<strong>非线性</strong>系统里才会分家（第 6、7 章的例子）；在<strong>线性</strong>系统里它们恰好等价，第 5 章会证明这一点。但在本章的条件下它们重合：若 <em>f</em> 连续可微、且 <em>x*</em> 是<strong>孤立</strong>不动点，则"吸引"与"渐近稳定"是一回事。这句"孤立"不能省——<em>ẋ</em> = 0 那条线上就没有一个孤立点。</p>
+      <p class="a p">另外记住"吸引子"（attractor）这个词的用法：它指一个系统<strong>最终住进去</strong>的集合。一维流里只有点这一种吸引子；闭轨、奇怪吸引子要等到有第二个维度。</p>
+    </div>
+    <div class="pfoot">§2.2 不动点与稳定性</div>
+  </section>
+
+  <!-- ========== 06 §2.2 半稳定 ========== -->
+  <section class="page" data-title="第三种不动点，一半谷底一半山顶">
+    <div class="page-inner">
+      <div class="split rev">
+        <div class="a fig">
+          <!--FIG:B-->
+<svg viewBox="0 0 480 320" role="img" aria-label="半稳定不动点：ẋ = x² 的 f 与流向"><line x1="44.0" y1="187.2" x2="460.0" y2="187.2" stroke="rgba(255,255,255,.22)" stroke-width="1.2"/><line x1="250.0" y1="210.0" x2="250.0" y2="40.0" stroke="rgba(255,255,255,.22)" stroke-width="1.2"/><text x="454.0" y="181.2" fill="#8b95a4" font-size="11" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">x</text><text x="256.0" y="46.0" fill="#8b95a4" font-size="11" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">f(x)</text><path d="M44.0 45.1 L46.1 48.0 L48.1 50.8 L50.2 53.5 L52.2 56.3 L54.3 59.0 L56.4 61.7 L58.4 64.3 L60.5 67.0 L62.5 69.6 L64.6 72.1 L66.7 74.7 L68.7 77.2 L70.8 79.7 L72.8 82.1 L74.9 84.6 L77.0 87.0 L79.0 89.3 L81.1 91.7 L83.1 94.0 L85.2 96.3 L87.3 98.5 L89.3 100.8 L91.4 103.0 L93.4 105.1 L95.5 107.3 L97.6 109.4 L99.6 111.5 L101.7 113.5 L103.7 115.6 L105.8 117.6 L107.9 119.6 L109.9 121.5 L112.0 123.4 L114.0 125.3 L116.1 127.2 L118.2 129.0 L120.2 130.8 L122.3 132.6 L124.3 134.3 L126.4 136.0 L128.5 137.7 L130.5 139.4 L132.6 141.0 L134.6 142.6 L136.7 144.2 L138.8 145.8 L140.8 147.3 L142.9 148.8 L144.9 150.2 L147.0 151.7 L149.1 153.1 L151.1 154.5 L153.2 155.8 L155.2 157.1 L157.3 158.4 L159.4 159.7 L161.4 160.9 L163.5 162.1 L165.5 163.3 L167.6 164.4 L169.7 165.6 L171.7 166.7 L173.8 167.7 L175.8 168.8 L177.9 169.8 L180.0 170.8 L182.0 171.7 L184.1 172.6 L186.1 173.5 L188.2 174.4 L190.3 175.2 L192.3 176.0 L194.4 176.8 L196.4 177.6 L198.5 178.3 L200.6 179.0 L202.6 179.7 L204.7 180.3 L206.7 180.9 L208.8 181.5 L210.9 182.0 L212.9 182.6 L215.0 183.1 L217.0 183.5 L219.1 184.0 L221.2 184.4 L223.2 184.8 L225.3 185.1 L227.3 185.5 L229.4 185.8 L231.5 186.0 L233.5 186.3 L235.6 186.5 L237.6 186.7 L239.7 186.8 L241.8 186.9 L243.8 187.0 L245.9 187.1 L247.9 187.2 L250.0 187.2 L252.1 187.2 L254.1 187.1 L256.2 187.0 L258.2 186.9 L260.3 186.8 L262.4 186.7 L264.4 186.5 L266.5 186.3 L268.5 186.0 L270.6 185.8 L272.7 185.5 L274.7 185.1 L276.8 184.8 L278.8 184.4 L280.9 184.0 L283.0 183.5 L285.0 183.1 L287.1 182.6 L289.1 182.0 L291.2 181.5 L293.3 180.9 L295.3 180.3 L297.4 179.7 L299.4 179.0 L301.5 178.3 L303.6 177.6 L305.6 176.8 L307.7 176.0 L309.7 175.2 L311.8 174.4 L313.9 173.5 L315.9 172.6 L318.0 171.7 L320.0 170.8 L322.1 169.8 L324.2 168.8 L326.2 167.7 L328.3 166.7 L330.3 165.6 L332.4 164.4 L334.5 163.3 L336.5 162.1 L338.6 160.9 L340.6 159.7 L342.7 158.4 L344.8 157.1 L346.8 155.8 L348.9 154.5 L350.9 153.1 L353.0 151.7 L355.1 150.2 L357.1 148.8 L359.2 147.3 L361.2 145.8 L363.3 144.2 L365.4 142.6 L367.4 141.0 L369.5 139.4 L371.5 137.7 L373.6 136.0 L375.7 134.3 L377.7 132.6 L379.8 130.8 L381.8 129.0 L383.9 127.2 L386.0 125.3 L388.0 123.4 L390.1 121.5 L392.1 119.6 L394.2 117.6 L396.3 115.6 L398.3 113.5 L400.4 111.5 L402.4 109.4 L404.5 107.3 L406.6 105.1 L408.6 103.0 L410.7 100.8 L412.7 98.5 L414.8 96.3 L416.9 94.0 L418.9 91.7 L421.0 89.3 L423.0 87.0 L425.1 84.6 L427.2 82.1 L429.2 79.7 L431.3 77.2 L433.3 74.7 L435.4 72.1 L437.5 69.6 L439.5 67.0 L441.6 64.3 L443.6 61.7 L445.7 59.0 L447.8 56.3 L449.8 53.5 L451.9 50.8 L453.9 48.0 L456.0 45.1" fill="none" stroke="#e8b04b" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round"/><text x="46.0" y="46.0" fill="#e8b04b" font-size="11.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start" font-weight="700">ẋ = x²</text><text x="352.4" y="155.9" fill="#5c6775" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">f 在 0 处相切于横轴</text><line x1="44.0" y1="258.0" x2="460.0" y2="258.0" stroke="rgba(255,255,255,.26)" stroke-width="1.4"/><line x1="71.8" y1="258.0" x2="91.8" y2="258.0" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="91.8" y1="258.0" x2="87.4" y2="254.9" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="91.8" y1="258.0" x2="87.4" y2="261.1" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="121.9" y1="258.0" x2="141.9" y2="258.0" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="141.9" y1="258.0" x2="137.5" y2="254.9" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="141.9" y1="258.0" x2="137.5" y2="261.1" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="169.8" y1="258.0" x2="181.5" y2="258.0" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="181.5" y1="258.0" x2="177.1" y2="254.9" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="181.5" y1="258.0" x2="177.1" y2="261.1" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="212.1" y1="258.0" x2="219.0" y2="258.0" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="219.0" y1="258.0" x2="214.6" y2="254.9" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="219.0" y1="258.0" x2="214.6" y2="261.1" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="287.9" y1="258.0" x2="294.7" y2="258.0" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="294.7" y1="258.0" x2="290.3" y2="254.9" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="294.7" y1="258.0" x2="290.3" y2="261.1" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="330.2" y1="258.0" x2="341.9" y2="258.0" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="341.9" y1="258.0" x2="337.5" y2="254.9" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="341.9" y1="258.0" x2="337.5" y2="261.1" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="378.1" y1="258.0" x2="398.1" y2="258.0" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="398.1" y1="258.0" x2="393.7" y2="254.9" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="398.1" y1="258.0" x2="393.7" y2="261.1" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="428.2" y1="258.0" x2="448.2" y2="258.0" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="448.2" y1="258.0" x2="443.8" y2="254.9" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><line x1="448.2" y1="258.0" x2="443.8" y2="261.1" stroke="rgba(139,149,164,.55)" stroke-width="1.2"/><path d="M250.0 252.6 A5.4 5.4 0 0 0 250.0 263.4 Z" fill="#e8b04b"/><circle cx="250.0" cy="258.0" r="5.4" fill="none" stroke="#e8b04b" stroke-width="1.8"/><text x="250.0" y="282.0" fill="#e8b04b" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">半稳定（half-stable）</text><text x="105.2" y="304.0" fill="#4fbfa8" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">左侧：被推进来</text><text x="394.8" y="304.0" fill="#ff9770" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">右侧：被推出去</text></svg>
+<!--END:B-->
+          <div class="figcap"><em>ẋ</em> = <em>x</em>² 的 <em>f</em> 与流向。零点只有一个，但两侧箭头朝同一个方向：左边被推进来，右边被推出去。原书用<strong>半实心点</strong>画这种不动点。</div>
+        </div>
+        <div>
+          <div class="a kicker">§2.2 · 三种命运</div>
+          <h2 class="a">第三种不动点，一半谷底一半山顶</h2>
+          <p class="a p">稳定与不稳定各占一头，中间还夹着一种：<strong>一侧吸进来、另一侧推出去</strong>。它叫半稳定（half-stable）。</p>
+          <p class="a p">例子：<em>ẋ</em> = <em>x</em>²。零点只有 <em>x*</em> = 0。可是 <em>x</em> &lt; 0 时 <em>ẋ</em> &gt; 0——向右，回到 0；<em>x</em> &gt; 0 时 <em>ẋ</em> &gt; 0——还是向右，离开 0。<strong>同样是"向右"，一个是回家，一个是离家。</strong></p>
+          <p class="a p">所以判稳时不能只问"有没有被吸进来"，必须两侧都问。</p>
+          <p class="a p">还有一种退化情形：<em>ẋ</em> = 0。整条数轴都是不动点，没有一个能叫孤立。这时"稳定/不稳定"这套词汇整体失效——扰动既不被放大也不被压回，它就停在原地。</p>
+          <p class="a p">这三种"怪点"在下一节会有一个共同的名字：<em>f′(x*)</em> = 0。它们也是第 3 章分岔的前夜：在那一点上，零点成双成对地生灭。</p>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§2.2 不动点与稳定性</div>
+  </section>
+
+  <!-- ========== 07 演示 · 一维流实验室 ========== -->
+  <section class="page" data-title="演示 · 一条线上的三种命运" data-steps="3" data-hook="flow">
+    <div class="page-inner">
+      <div class="split" style="grid-template-columns:1.12fr .88fr">
+        <div class="a demo">
+          <canvas id="cv1" height="380"></canvas>
+          <div class="ctrls">
+            <div class="slider"><span>初值 x₀</span>
+              <input type="range" id="p1" min="-1.6" max="2.2" step="0.01" value="0.30"><b id="p1v">0.30</b></div>
+            <button class="btn" id="reset1">重来</button>
+          </div>
+          <div class="readout" id="ro1"></div>
+        </div>
+        <div class="a">
+          <div class="steps" id="st1">
+            <div class="step on">
+              <div class="snum">01 / 03 · 两个零点</div>
+              <h3><em>ẋ</em> = <em>x</em>(1 − <em>x</em>)：一条线，两种命运</h3>
+              <p>x = 0 是山顶，x = 1 是谷底。<strong>拖动初值，看它往哪边跑</strong>——0 与 1 之间全往右，其余全往左。<br>注意 1 附近速度变慢：越靠近谷底，坡度越平。</p>
+            </div>
+            <div class="step">
+              <div class="snum">02 / 03 · 只有一个零点</div>
+              <h3><em>ẋ</em> = <em>x</em>²：半稳定，两侧同向</h3>
+              <p>零点是 x = 0。左侧箭头朝右（回家），右侧箭头也朝右（离家）。<strong>同一个箭头方向，两种相反的命运</strong>——判稳必须两侧都看。</p>
+            </div>
+            <div class="step">
+              <div class="snum">03 / 03 · 没有零点</div>
+              <h3><em>ẋ</em> = 1 + <em>x</em>²：有限时间跑掉</h3>
+              <p>整条线上没有不动点，速度永远为正，而且越来越大。<strong>它会在一段有限的时间内冲出量程</strong>：这不是数值发散，是解真的到头了（§2.5 末尾会算给你看）。</p>
+            </div>
+          </div>
+          <div class="sdots" id="sd1"><i class="on"></i><i></i><i></i></div>
+          <div class="readout" style="margin-top:14px">在画布上按住拖动 ＝ 换一个初值</div>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§2.1–2.2</div>
+  </section>
+
+  <!-- ========== 08 §2.3 种群增长 建模 ========== -->
+  <section class="page" data-title="先让增长自己踩刹车">
+    <div class="page-inner">
+      <div class="a kicker">§2.3 · 种群增长</div>
+      <h2 class="a">先让增长自己踩刹车</h2>
+      <p class="a p">最朴素的假设是无限增长：<em>ẋ</em> = <em>rx</em>，<em>r</em> &gt; 0 是增长率。解是 <em>x(t)</em> = <em>x</em>₀<em>e<sup>rt</sup></em>，指数爆炸。这个模型只在种群还很小的那段时间里对。</p>
+      <p class="a p">为什么？食物、空间、天敌都是有限的。让"人均增长率"随密度下降，是最省事的修正：把常数 <em>r</em> 换成一个随 <em>x</em> 递减的量。取最简的线性递减——人均增长率 = <em>r</em>(1 − <em>x</em>/<em>K</em>)：</p>
+      <span class="a formula">ẋ = rx(1 − x/K)</span>
+      <p class="a p">这就是逻辑斯谛方程（logistic equation）。两个参数各管一件事：<em>r</em> 管快慢，量纲 1/时间；<em>K</em> 管终点，量纲"个体数"，叫环境容量（carrying capacity）。</p>
+      <p class="a p">先手算一遍：<em>x</em> = 0 与 <em>x</em> = <em>K</em> 是不动点；0 &lt; <em>x</em> &lt; <em>K</em> 时 <em>ẋ</em> &gt; 0，单调增；<em>x</em> &gt; <em>K</em> 时 <em>ẋ</em> &lt; 0，退回来。所以 <em>K</em> <strong>两侧都汇入</strong>（渐近稳定），而 <em>x</em> = 0 <strong>两侧都逃离</strong>（不稳定）——只是 <em>x</em> &lt; 0 那半没有生物学意义。<em>f′</em>(0) = <em>r</em> &gt; 0，正正说明了这一点。</p>
+      <p class="a p">这个模型踩了四块地砖：无年龄结构、无时滞、环境不变、个体彼此独立（只通过总数耦合）。后面几章会一块一块地把它们抽走——每抽一块，行为就变一次。</p>
+    </div>
+    <div class="pfoot">§2.3 种群增长</div>
+  </section>
+
+  <!-- ========== 09 §2.3 无量纲化 ========== -->
+  <section class="page" data-title="三个参数太多，一个就够">
+    <div class="page-inner">
+      <div class="a kicker">§2.3 · 丢掉单位</div>
+      <h2 class="a">三个参数太多，一个就够</h2>
+      <p class="a p">令 <em>u</em> = <em>x</em>/<em>K</em>（状态换成"占容量的比例"），<em>τ</em> = <em>rt</em>（时间以 1/<em>r</em> 为单位，也就是一个 e-folding 时间）。代进去：</p>
+      <span class="a formula">dx/dt = rK·du/dτ ， 右边 = r(Ku)(1 − u) = rK·u(1 − u)</span>
+      <p class="a p">两边同除 <em>rK</em>，得</p>
+      <span class="a formula">du/dτ = u(1 − u)</span>
+      <p class="a p">两个参数全没了。这不是变魔术，它说明：<strong>所有逻辑斯谛系统其实是同一个系统，只是尺子不同。</strong></p>
+      <p class="a p">这叫无量纲化（nondimensionalization）。好处三层：公式更短；数值更稳（各量都在 1 附近，浮点不丢精度）；结论更普适（<em>K</em> = 10³ 的鱼群和 <em>K</em> = 10⁶ 的细菌共用一条曲线）。</p>
+      <p class="a p">代价也要记账：还原的时候必须乘回去。你算出的"1 个时间单位"到底是 1 小时还是 1 天，完全取决于 <em>r</em>；而 <em>r</em> 的值只有具体系统知道。<strong>无量纲化能去掉参数，不能去掉物理。</strong></p>
+      <p class="a p">本章后面统一用 <em>du/dτ</em> = <em>u</em>(1 − <em>u</em>)，只是把符号写回 <em>x</em>、<em>t</em> 省事。</p>
+    </div>
+    <div class="pfoot">§2.3 种群增长</div>
+  </section>
+
+  <!-- ========== 10 §2.3 解与图像 ========== -->
+  <section class="page" data-title="每一族初值，都汇到同一条地平线">
+    <div class="page-inner">
+      <div class="split">
+        <div>
+          <div class="a kicker">§2.3 · 解长什么样</div>
+          <h2 class="a">每一族初值，都汇到同一条地平线</h2>
+          <p class="a p">逻辑斯谛是可以解出来的。分离变量 <em>dx</em>/[<em>x</em>(1 − <em>x</em>)] = <em>dt</em>，用部分分式拆开积分，再解出 <em>x</em>：</p>
+          <span class="a formula">x(t) = 1 / [ 1 + (1/x₀ − 1)e<sup>−t</sup> ]</span>
+          <p class="a p">三个自检：① <em>t</em> = 0 时右边等于 <em>x</em>₀ ✓；② <em>t</em> → ∞ 时 → 1，与初值多小无关 ✓；③ 把 <em>K</em>、<em>r</em> 放回去，终点回到 <em>K</em> ✓。</p>
+          <p class="a p">图里五条曲线，初值从 0.02 到 2.5，在 <em>x</em> = 1 处全部压平。注意 0.02 那条：<strong>前两个时间单位只从 0.02 爬到 0.13</strong>，之后才起飞；到 <em>t</em> = 5 时到 0.75。<strong>不是它慢，是它离阈值太近</strong>——这也是"小种群容易灭绝"的数学根源：随机扰动一来，它就掉到 0 上再也起不来。</p>
+          <p class="a p">所以逻辑斯谛那句"只要 <em>x</em>₀ &gt; 0 就一定能长到 <em>K</em>"，条件是<strong>个体数足够大、且模型里没有随机项</strong>。去掉任何一个，结论就变。</p>
+        </div>
+        <div class="a fig">
+          <!--FIG:C-->
+<svg viewBox="0 0 480 320" role="img" aria-label="逻辑斯谛方程的一族解"><line x1="46.0" y1="212.5" x2="456.0" y2="212.5" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="46.0" y1="171.0" x2="456.0" y2="171.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="46.0" y1="129.5" x2="456.0" y2="129.5" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="46.0" y1="88.0" x2="456.0" y2="88.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="46.0" y1="46.5" x2="456.0" y2="46.5" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="148.5" y1="254.0" x2="148.5" y2="34.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="251.0" y1="254.0" x2="251.0" y2="34.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="353.5" y1="254.0" x2="353.5" y2="34.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="456.0" y1="254.0" x2="456.0" y2="34.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="46.0" y1="254.0" x2="460.0" y2="254.0" stroke="rgba(255,255,255,.22)" stroke-width="1.2"/><line x1="46.0" y1="254.0" x2="46.0" y2="30.0" stroke="rgba(255,255,255,.22)" stroke-width="1.2"/><text x="454.0" y="246.0" fill="#8b95a4" font-size="11" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">t</text><text x="36.0" y="36.0" fill="#8b95a4" font-size="11" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">x</text><text x="454.0" y="165.0" fill="#4fbfa8" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">K = 1</text><line x1="46.0" y1="171.0" x2="456.0" y2="171.0" stroke="rgba(79,191,168,.55)" stroke-width="1.1" stroke-dasharray="4 4"/><path d="M46.0 252.3 L47.7 252.3 L49.4 252.2 L51.1 252.2 L52.8 252.1 L54.5 252.0 L56.2 252.0 L58.0 251.9 L59.7 251.8 L61.4 251.8 L63.1 251.7 L64.8 251.6 L66.5 251.5 L68.2 251.5 L69.9 251.4 L71.6 251.3 L73.3 251.2 L75.0 251.1 L76.8 251.0 L78.5 250.9 L80.2 250.8 L81.9 250.7 L83.6 250.6 L85.3 250.5 L87.0 250.4 L88.7 250.3 L90.4 250.2 L92.1 250.0 L93.8 249.9 L95.5 249.8 L97.2 249.6 L99.0 249.5 L100.7 249.4 L102.4 249.2 L104.1 249.1 L105.8 248.9 L107.5 248.7 L109.2 248.6 L110.9 248.4 L112.6 248.2 L114.3 248.0 L116.0 247.8 L117.8 247.7 L119.5 247.5 L121.2 247.3 L122.9 247.0 L124.6 246.8 L126.3 246.6 L128.0 246.4 L129.7 246.1 L131.4 245.9 L133.1 245.7 L134.8 245.4 L136.5 245.1 L138.2 244.9 L140.0 244.6 L141.7 244.3 L143.4 244.0 L145.1 243.7 L146.8 243.4 L148.5 243.1 L150.2 242.8 L151.9 242.5 L153.6 242.1 L155.3 241.8 L157.0 241.4 L158.8 241.1 L160.5 240.7 L162.2 240.3 L163.9 240.0 L165.6 239.6 L167.3 239.2 L169.0 238.8 L170.7 238.3 L172.4 237.9 L174.1 237.5 L175.8 237.0 L177.5 236.6 L179.2 236.1 L181.0 235.6 L182.7 235.2 L184.4 234.7 L186.1 234.2 L187.8 233.7 L189.5 233.1 L191.2 232.6 L192.9 232.1 L194.6 231.5 L196.3 231.0 L198.0 230.4 L199.8 229.9 L201.5 229.3 L203.2 228.7 L204.9 228.1 L206.6 227.5 L208.3 226.9 L210.0 226.3 L211.7 225.7 L213.4 225.1 L215.1 224.4 L216.8 223.8 L218.5 223.1 L220.2 222.5 L222.0 221.8 L223.7 221.2 L225.4 220.5 L227.1 219.9 L228.8 219.2 L230.5 218.5 L232.2 217.8 L233.9 217.1 L235.6 216.5 L237.3 215.8 L239.0 215.1 L240.8 214.4 L242.5 213.7 L244.2 213.0 L245.9 212.3 L247.6 211.6 L249.3 210.9 L251.0 210.2 L252.7 209.6 L254.4 208.9 L256.1 208.2 L257.8 207.5 L259.5 206.8 L261.2 206.1 L263.0 205.5 L264.7 204.8 L266.4 204.1 L268.1 203.5 L269.8 202.8 L271.5 202.2 L273.2 201.5 L274.9 200.9 L276.6 200.2 L278.3 199.6 L280.0 199.0 L281.8 198.4 L283.5 197.8 L285.2 197.2 L286.9 196.6 L288.6 196.0 L290.3 195.4 L292.0 194.8 L293.7 194.3 L295.4 193.7 L297.1 193.2 L298.8 192.6 L300.5 192.1 L302.2 191.6 L304.0 191.1 L305.7 190.6 L307.4 190.1 L309.1 189.6 L310.8 189.1 L312.5 188.6 L314.2 188.2 L315.9 187.7 L317.6 187.3 L319.3 186.9 L321.0 186.4 L322.8 186.0 L324.5 185.6 L326.2 185.2 L327.9 184.8 L329.6 184.5 L331.3 184.1 L333.0 183.7 L334.7 183.4 L336.4 183.0 L338.1 182.7 L339.8 182.3 L341.5 182.0 L343.2 181.7 L345.0 181.4 L346.7 181.1 L348.4 180.8 L350.1 180.5 L351.8 180.2 L353.5 180.0 L355.2 179.7 L356.9 179.5 L358.6 179.2 L360.3 179.0 L362.0 178.7 L363.8 178.5 L365.5 178.3 L367.2 178.0 L368.9 177.8 L370.6 177.6 L372.3 177.4 L374.0 177.2 L375.7 177.0 L377.4 176.9 L379.1 176.7 L380.8 176.5 L382.5 176.3 L384.2 176.2 L386.0 176.0 L387.7 175.9 L389.4 175.7 L391.1 175.6 L392.8 175.4 L394.5 175.3 L396.2 175.1 L397.9 175.0 L399.6 174.9 L401.3 174.8 L403.0 174.6 L404.8 174.5 L406.5 174.4 L408.2 174.3 L409.9 174.2 L411.6 174.1 L413.3 174.0 L415.0 173.9 L416.7 173.8 L418.4 173.7 L420.1 173.6 L421.8 173.6 L423.5 173.5 L425.2 173.4 L427.0 173.3 L428.7 173.2 L430.4 173.2 L432.1 173.1 L433.8 173.0 L435.5 173.0 L437.2 172.9 L438.9 172.8 L440.6 172.8 L442.3 172.7 L444.0 172.7 L445.8 172.6 L447.5 172.6 L449.2 172.5 L450.9 172.5 L452.6 172.4 L454.3 172.4 L456.0 172.3" fill="none" stroke="rgba(98,208,255,.55)" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/><path d="M46.0 244.9 L47.7 244.6 L49.4 244.3 L51.1 244.0 L52.8 243.7 L54.5 243.4 L56.2 243.1 L58.0 242.8 L59.7 242.5 L61.4 242.1 L63.1 241.8 L64.8 241.4 L66.5 241.1 L68.2 240.7 L69.9 240.3 L71.6 239.9 L73.3 239.6 L75.0 239.2 L76.8 238.7 L78.5 238.3 L80.2 237.9 L81.9 237.5 L83.6 237.0 L85.3 236.6 L87.0 236.1 L88.7 235.6 L90.4 235.1 L92.1 234.6 L93.8 234.1 L95.5 233.6 L97.2 233.1 L99.0 232.6 L100.7 232.1 L102.4 231.5 L104.1 231.0 L105.8 230.4 L107.5 229.8 L109.2 229.3 L110.9 228.7 L112.6 228.1 L114.3 227.5 L116.0 226.9 L117.8 226.3 L119.5 225.7 L121.2 225.0 L122.9 224.4 L124.6 223.8 L126.3 223.1 L128.0 222.5 L129.7 221.8 L131.4 221.2 L133.1 220.5 L134.8 219.8 L136.5 219.2 L138.2 218.5 L140.0 217.8 L141.7 217.1 L143.4 216.4 L145.1 215.8 L146.8 215.1 L148.5 214.4 L150.2 213.7 L151.9 213.0 L153.6 212.3 L155.3 211.6 L157.0 210.9 L158.8 210.2 L160.5 209.5 L162.2 208.8 L163.9 208.2 L165.6 207.5 L167.3 206.8 L169.0 206.1 L170.7 205.4 L172.4 204.8 L174.1 204.1 L175.8 203.5 L177.5 202.8 L179.2 202.1 L181.0 201.5 L182.7 200.9 L184.4 200.2 L186.1 199.6 L187.8 199.0 L189.5 198.4 L191.2 197.7 L192.9 197.1 L194.6 196.6 L196.3 196.0 L198.0 195.4 L199.8 194.8 L201.5 194.3 L203.2 193.7 L204.9 193.2 L206.6 192.6 L208.3 192.1 L210.0 191.6 L211.7 191.1 L213.4 190.6 L215.1 190.1 L216.8 189.6 L218.5 189.1 L220.2 188.6 L222.0 188.2 L223.7 187.7 L225.4 187.3 L227.1 186.8 L228.8 186.4 L230.5 186.0 L232.2 185.6 L233.9 185.2 L235.6 184.8 L237.3 184.4 L239.0 184.1 L240.8 183.7 L242.5 183.3 L244.2 183.0 L245.9 182.7 L247.6 182.3 L249.3 182.0 L251.0 181.7 L252.7 181.4 L254.4 181.1 L256.1 180.8 L257.8 180.5 L259.5 180.2 L261.2 180.0 L263.0 179.7 L264.7 179.4 L266.4 179.2 L268.1 179.0 L269.8 178.7 L271.5 178.5 L273.2 178.3 L274.9 178.0 L276.6 177.8 L278.3 177.6 L280.0 177.4 L281.8 177.2 L283.5 177.0 L285.2 176.9 L286.9 176.7 L288.6 176.5 L290.3 176.3 L292.0 176.2 L293.7 176.0 L295.4 175.8 L297.1 175.7 L298.8 175.6 L300.5 175.4 L302.2 175.3 L304.0 175.1 L305.7 175.0 L307.4 174.9 L309.1 174.8 L310.8 174.6 L312.5 174.5 L314.2 174.4 L315.9 174.3 L317.6 174.2 L319.3 174.1 L321.0 174.0 L322.8 173.9 L324.5 173.8 L326.2 173.7 L327.9 173.6 L329.6 173.6 L331.3 173.5 L333.0 173.4 L334.7 173.3 L336.4 173.2 L338.1 173.2 L339.8 173.1 L341.5 173.0 L343.2 173.0 L345.0 172.9 L346.7 172.8 L348.4 172.8 L350.1 172.7 L351.8 172.7 L353.5 172.6 L355.2 172.6 L356.9 172.5 L358.6 172.5 L360.3 172.4 L362.0 172.4 L363.8 172.3 L365.5 172.3 L367.2 172.2 L368.9 172.2 L370.6 172.2 L372.3 172.1 L374.0 172.1 L375.7 172.0 L377.4 172.0 L379.1 172.0 L380.8 171.9 L382.5 171.9 L384.2 171.9 L386.0 171.9 L387.7 171.8 L389.4 171.8 L391.1 171.8 L392.8 171.7 L394.5 171.7 L396.2 171.7 L397.9 171.7 L399.6 171.7 L401.3 171.6 L403.0 171.6 L404.8 171.6 L406.5 171.6 L408.2 171.6 L409.9 171.5 L411.6 171.5 L413.3 171.5 L415.0 171.5 L416.7 171.5 L418.4 171.4 L420.1 171.4 L421.8 171.4 L423.5 171.4 L425.2 171.4 L427.0 171.4 L428.7 171.4 L430.4 171.4 L432.1 171.3 L433.8 171.3 L435.5 171.3 L437.2 171.3 L438.9 171.3 L440.6 171.3 L442.3 171.3 L444.0 171.3 L445.8 171.3 L447.5 171.2 L449.2 171.2 L450.9 171.2 L452.6 171.2 L454.3 171.2 L456.0 171.2" fill="none" stroke="#62d0ff" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/><path d="M46.0 224.9 L47.7 224.3 L49.4 223.7 L51.1 223.0 L52.8 222.4 L54.5 221.7 L56.2 221.1 L58.0 220.4 L59.7 219.7 L61.4 219.1 L63.1 218.4 L64.8 217.7 L66.5 217.0 L68.2 216.3 L69.9 215.6 L71.6 215.0 L73.3 214.3 L75.0 213.6 L76.8 212.9 L78.5 212.2 L80.2 211.5 L81.9 210.8 L83.6 210.1 L85.3 209.4 L87.0 208.7 L88.7 208.1 L90.4 207.4 L92.1 206.7 L93.8 206.0 L95.5 205.3 L97.2 204.7 L99.0 204.0 L100.7 203.4 L102.4 202.7 L104.1 202.0 L105.8 201.4 L107.5 200.8 L109.2 200.1 L110.9 199.5 L112.6 198.9 L114.3 198.3 L116.0 197.7 L117.8 197.1 L119.5 196.5 L121.2 195.9 L122.9 195.3 L124.6 194.7 L126.3 194.2 L128.0 193.6 L129.7 193.1 L131.4 192.5 L133.1 192.0 L134.8 191.5 L136.5 191.0 L138.2 190.5 L140.0 190.0 L141.7 189.5 L143.4 189.0 L145.1 188.6 L146.8 188.1 L148.5 187.7 L150.2 187.2 L151.9 186.8 L153.6 186.4 L155.3 185.9 L157.0 185.5 L158.8 185.1 L160.5 184.8 L162.2 184.4 L163.9 184.0 L165.6 183.7 L167.3 183.3 L169.0 183.0 L170.7 182.6 L172.4 182.3 L174.1 182.0 L175.8 181.6 L177.5 181.3 L179.2 181.0 L181.0 180.8 L182.7 180.5 L184.4 180.2 L186.1 179.9 L187.8 179.7 L189.5 179.4 L191.2 179.2 L192.9 178.9 L194.6 178.7 L196.3 178.4 L198.0 178.2 L199.8 178.0 L201.5 177.8 L203.2 177.6 L204.9 177.4 L206.6 177.2 L208.3 177.0 L210.0 176.8 L211.7 176.6 L213.4 176.5 L215.1 176.3 L216.8 176.1 L218.5 176.0 L220.2 175.8 L222.0 175.7 L223.7 175.5 L225.4 175.4 L227.1 175.3 L228.8 175.1 L230.5 175.0 L232.2 174.9 L233.9 174.7 L235.6 174.6 L237.3 174.5 L239.0 174.4 L240.8 174.3 L242.5 174.2 L244.2 174.1 L245.9 174.0 L247.6 173.9 L249.3 173.8 L251.0 173.7 L252.7 173.6 L254.4 173.5 L256.1 173.5 L257.8 173.4 L259.5 173.3 L261.2 173.2 L263.0 173.2 L264.7 173.1 L266.4 173.0 L268.1 173.0 L269.8 172.9 L271.5 172.8 L273.2 172.8 L274.9 172.7 L276.6 172.7 L278.3 172.6 L280.0 172.6 L281.8 172.5 L283.5 172.5 L285.2 172.4 L286.9 172.4 L288.6 172.3 L290.3 172.3 L292.0 172.2 L293.7 172.2 L295.4 172.2 L297.1 172.1 L298.8 172.1 L300.5 172.0 L302.2 172.0 L304.0 172.0 L305.7 171.9 L307.4 171.9 L309.1 171.9 L310.8 171.9 L312.5 171.8 L314.2 171.8 L315.9 171.8 L317.6 171.7 L319.3 171.7 L321.0 171.7 L322.8 171.7 L324.5 171.6 L326.2 171.6 L327.9 171.6 L329.6 171.6 L331.3 171.6 L333.0 171.5 L334.7 171.5 L336.4 171.5 L338.1 171.5 L339.8 171.5 L341.5 171.5 L343.2 171.4 L345.0 171.4 L346.7 171.4 L348.4 171.4 L350.1 171.4 L351.8 171.4 L353.5 171.4 L355.2 171.3 L356.9 171.3 L358.6 171.3 L360.3 171.3 L362.0 171.3 L363.8 171.3 L365.5 171.3 L367.2 171.3 L368.9 171.3 L370.6 171.3 L372.3 171.2 L374.0 171.2 L375.7 171.2 L377.4 171.2 L379.1 171.2 L380.8 171.2 L382.5 171.2 L384.2 171.2 L386.0 171.2 L387.7 171.2 L389.4 171.2 L391.1 171.2 L392.8 171.2 L394.5 171.2 L396.2 171.1 L397.9 171.1 L399.6 171.1 L401.3 171.1 L403.0 171.1 L404.8 171.1 L406.5 171.1 L408.2 171.1 L409.9 171.1 L411.6 171.1 L413.3 171.1 L415.0 171.1 L416.7 171.1 L418.4 171.1 L420.1 171.1 L421.8 171.1 L423.5 171.1 L425.2 171.1 L427.0 171.1 L428.7 171.1 L430.4 171.1 L432.1 171.1 L433.8 171.1 L435.5 171.1 L437.2 171.1 L438.9 171.1 L440.6 171.1 L442.3 171.0 L444.0 171.0 L445.8 171.0 L447.5 171.0 L449.2 171.0 L450.9 171.0 L452.6 171.0 L454.3 171.0 L456.0 171.0" fill="none" stroke="rgba(98,208,255,.85)" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/><path d="M46.0 187.6 L47.7 187.1 L49.4 186.7 L51.1 186.3 L52.8 185.9 L54.5 185.5 L56.2 185.1 L58.0 184.7 L59.7 184.3 L61.4 184.0 L63.1 183.6 L64.8 183.2 L66.5 182.9 L68.2 182.6 L69.9 182.2 L71.6 181.9 L73.3 181.6 L75.0 181.3 L76.8 181.0 L78.5 180.7 L80.2 180.4 L81.9 180.1 L83.6 179.9 L85.3 179.6 L87.0 179.4 L88.7 179.1 L90.4 178.9 L92.1 178.6 L93.8 178.4 L95.5 178.2 L97.2 178.0 L99.0 177.8 L100.7 177.6 L102.4 177.4 L104.1 177.2 L105.8 177.0 L107.5 176.8 L109.2 176.6 L110.9 176.4 L112.6 176.3 L114.3 176.1 L116.0 176.0 L117.8 175.8 L119.5 175.7 L121.2 175.5 L122.9 175.4 L124.6 175.2 L126.3 175.1 L128.0 175.0 L129.7 174.8 L131.4 174.7 L133.1 174.6 L134.8 174.5 L136.5 174.4 L138.2 174.3 L140.0 174.2 L141.7 174.1 L143.4 174.0 L145.1 173.9 L146.8 173.8 L148.5 173.7 L150.2 173.6 L151.9 173.5 L153.6 173.4 L155.3 173.4 L157.0 173.3 L158.8 173.2 L160.5 173.1 L162.2 173.1 L163.9 173.0 L165.6 172.9 L167.3 172.9 L169.0 172.8 L170.7 172.8 L172.4 172.7 L174.1 172.7 L175.8 172.6 L177.5 172.5 L179.2 172.5 L181.0 172.4 L182.7 172.4 L184.4 172.4 L186.1 172.3 L187.8 172.3 L189.5 172.2 L191.2 172.2 L192.9 172.1 L194.6 172.1 L196.3 172.1 L198.0 172.0 L199.8 172.0 L201.5 172.0 L203.2 171.9 L204.9 171.9 L206.6 171.9 L208.3 171.8 L210.0 171.8 L211.7 171.8 L213.4 171.8 L215.1 171.7 L216.8 171.7 L218.5 171.7 L220.2 171.7 L222.0 171.6 L223.7 171.6 L225.4 171.6 L227.1 171.6 L228.8 171.6 L230.5 171.5 L232.2 171.5 L233.9 171.5 L235.6 171.5 L237.3 171.5 L239.0 171.5 L240.8 171.4 L242.5 171.4 L244.2 171.4 L245.9 171.4 L247.6 171.4 L249.3 171.4 L251.0 171.4 L252.7 171.3 L254.4 171.3 L256.1 171.3 L257.8 171.3 L259.5 171.3 L261.2 171.3 L263.0 171.3 L264.7 171.3 L266.4 171.3 L268.1 171.3 L269.8 171.2 L271.5 171.2 L273.2 171.2 L274.9 171.2 L276.6 171.2 L278.3 171.2 L280.0 171.2 L281.8 171.2 L283.5 171.2 L285.2 171.2 L286.9 171.2 L288.6 171.2 L290.3 171.2 L292.0 171.2 L293.7 171.1 L295.4 171.1 L297.1 171.1 L298.8 171.1 L300.5 171.1 L302.2 171.1 L304.0 171.1 L305.7 171.1 L307.4 171.1 L309.1 171.1 L310.8 171.1 L312.5 171.1 L314.2 171.1 L315.9 171.1 L317.6 171.1 L319.3 171.1 L321.0 171.1 L322.8 171.1 L324.5 171.1 L326.2 171.1 L327.9 171.1 L329.6 171.1 L331.3 171.1 L333.0 171.1 L334.7 171.1 L336.4 171.1 L338.1 171.1 L339.8 171.0 L341.5 171.0 L343.2 171.0 L345.0 171.0 L346.7 171.0 L348.4 171.0 L350.1 171.0 L351.8 171.0 L353.5 171.0 L355.2 171.0 L356.9 171.0 L358.6 171.0 L360.3 171.0 L362.0 171.0 L363.8 171.0 L365.5 171.0 L367.2 171.0 L368.9 171.0 L370.6 171.0 L372.3 171.0 L374.0 171.0 L375.7 171.0 L377.4 171.0 L379.1 171.0 L380.8 171.0 L382.5 171.0 L384.2 171.0 L386.0 171.0 L387.7 171.0 L389.4 171.0 L391.1 171.0 L392.8 171.0 L394.5 171.0 L396.2 171.0 L397.9 171.0 L399.6 171.0 L401.3 171.0 L403.0 171.0 L404.8 171.0 L406.5 171.0 L408.2 171.0 L409.9 171.0 L411.6 171.0 L413.3 171.0 L415.0 171.0 L416.7 171.0 L418.4 171.0 L420.1 171.0 L421.8 171.0 L423.5 171.0 L425.2 171.0 L427.0 171.0 L428.7 171.0 L430.4 171.0 L432.1 171.0 L433.8 171.0 L435.5 171.0 L437.2 171.0 L438.9 171.0 L440.6 171.0 L442.3 171.0 L444.0 171.0 L445.8 171.0 L447.5 171.0 L449.2 171.0 L450.9 171.0 L452.6 171.0 L454.3 171.0 L456.0 171.0" fill="none" stroke="#4fbfa8" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/><path d="M46.0 46.5 L47.7 56.2 L49.4 64.8 L51.1 72.4 L52.8 79.2 L54.5 85.3 L56.2 90.8 L58.0 95.8 L59.7 100.4 L61.4 104.6 L63.1 108.4 L64.8 111.9 L66.5 115.1 L68.2 118.1 L69.9 120.9 L71.6 123.5 L73.3 125.9 L75.0 128.1 L76.8 130.2 L78.5 132.2 L80.2 134.0 L81.9 135.7 L83.6 137.4 L85.3 138.9 L87.0 140.3 L88.7 141.7 L90.4 143.0 L92.1 144.2 L93.8 145.3 L95.5 146.4 L97.2 147.5 L99.0 148.4 L100.7 149.4 L102.4 150.3 L104.1 151.1 L105.8 151.9 L107.5 152.7 L109.2 153.4 L110.9 154.1 L112.6 154.8 L114.3 155.4 L116.0 156.0 L117.8 156.6 L119.5 157.1 L121.2 157.6 L122.9 158.1 L124.6 158.6 L126.3 159.1 L128.0 159.5 L129.7 160.0 L131.4 160.4 L133.1 160.8 L134.8 161.1 L136.5 161.5 L138.2 161.8 L140.0 162.2 L141.7 162.5 L143.4 162.8 L145.1 163.1 L146.8 163.4 L148.5 163.6 L150.2 163.9 L151.9 164.2 L153.6 164.4 L155.3 164.6 L157.0 164.9 L158.8 165.1 L160.5 165.3 L162.2 165.5 L163.9 165.7 L165.6 165.9 L167.3 166.0 L169.0 166.2 L170.7 166.4 L172.4 166.5 L174.1 166.7 L175.8 166.8 L177.5 167.0 L179.2 167.1 L181.0 167.2 L182.7 167.4 L184.4 167.5 L186.1 167.6 L187.8 167.7 L189.5 167.8 L191.2 167.9 L192.9 168.0 L194.6 168.1 L196.3 168.2 L198.0 168.3 L199.8 168.4 L201.5 168.5 L203.2 168.6 L204.9 168.7 L206.6 168.8 L208.3 168.8 L210.0 168.9 L211.7 169.0 L213.4 169.0 L215.1 169.1 L216.8 169.2 L218.5 169.2 L220.2 169.3 L222.0 169.3 L223.7 169.4 L225.4 169.4 L227.1 169.5 L228.8 169.5 L230.5 169.6 L232.2 169.6 L233.9 169.7 L235.6 169.7 L237.3 169.8 L239.0 169.8 L240.8 169.9 L242.5 169.9 L244.2 169.9 L245.9 170.0 L247.6 170.0 L249.3 170.0 L251.0 170.1 L252.7 170.1 L254.4 170.1 L256.1 170.1 L257.8 170.2 L259.5 170.2 L261.2 170.2 L263.0 170.3 L264.7 170.3 L266.4 170.3 L268.1 170.3 L269.8 170.3 L271.5 170.4 L273.2 170.4 L274.9 170.4 L276.6 170.4 L278.3 170.4 L280.0 170.5 L281.8 170.5 L283.5 170.5 L285.2 170.5 L286.9 170.5 L288.6 170.5 L290.3 170.6 L292.0 170.6 L293.7 170.6 L295.4 170.6 L297.1 170.6 L298.8 170.6 L300.5 170.6 L302.2 170.6 L304.0 170.7 L305.7 170.7 L307.4 170.7 L309.1 170.7 L310.8 170.7 L312.5 170.7 L314.2 170.7 L315.9 170.7 L317.6 170.7 L319.3 170.7 L321.0 170.7 L322.8 170.8 L324.5 170.8 L326.2 170.8 L327.9 170.8 L329.6 170.8 L331.3 170.8 L333.0 170.8 L334.7 170.8 L336.4 170.8 L338.1 170.8 L339.8 170.8 L341.5 170.8 L343.2 170.8 L345.0 170.8 L346.7 170.8 L348.4 170.8 L350.1 170.8 L351.8 170.9 L353.5 170.9 L355.2 170.9 L356.9 170.9 L358.6 170.9 L360.3 170.9 L362.0 170.9 L363.8 170.9 L365.5 170.9 L367.2 170.9 L368.9 170.9 L370.6 170.9 L372.3 170.9 L374.0 170.9 L375.7 170.9 L377.4 170.9 L379.1 170.9 L380.8 170.9 L382.5 170.9 L384.2 170.9 L386.0 170.9 L387.7 170.9 L389.4 170.9 L391.1 170.9 L392.8 170.9 L394.5 170.9 L396.2 170.9 L397.9 170.9 L399.6 170.9 L401.3 170.9 L403.0 170.9 L404.8 170.9 L406.5 170.9 L408.2 170.9 L409.9 170.9 L411.6 170.9 L413.3 170.9 L415.0 170.9 L416.7 170.9 L418.4 170.9 L420.1 170.9 L421.8 170.9 L423.5 170.9 L425.2 171.0 L427.0 171.0 L428.7 171.0 L430.4 171.0 L432.1 171.0 L433.8 171.0 L435.5 171.0 L437.2 171.0 L438.9 171.0 L440.6 171.0 L442.3 171.0 L444.0 171.0 L445.8 171.0 L447.5 171.0 L449.2 171.0 L450.9 171.0 L452.6 171.0 L454.3 171.0 L456.0 171.0" fill="none" stroke="#ff9770" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/><text x="71.9" y="253.4" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">x₀ = 0.02</text><text x="49.1" y="39.5" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">x₀ = 2.5（从上往下：2.5 → 0.8 → 0.35 → 0.11 → 0.02）</text><text x="46.0" y="286.0" fill="#5c6775" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">ẋ = x(1 − x)：无论从哪出发，都汇到 x = 1（只要 x₀ &gt; 0）。</text></svg>
+<!--END:C-->
+          <div class="figcap">逻辑斯谛的一族解，<em>r</em> = 1、<em>K</em> = 1。虚线是环境容量 <em>K</em>。从下方逼近时先快后慢，从上方落下时则一路单调下压。</div>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§2.3 种群增长</div>
+  </section>
+
+  <!-- ========== 11 §2.3 阈值收割 ========== -->
+  <section class="page" data-title="每年捞走固定的量，会捞出什么">
+    <div class="page-inner">
+      <div class="a kicker">§2.3 · 加一只手进去</div>
+      <h2 class="a">每年捞走固定的量，会捞出什么</h2>
+      <p class="a p">让模型多一项：<em>ẋ</em> = <em>x</em>(1 − <em>x</em>) − <em>h</em>，<em>h</em> 是每单位时间固定捞走的量（已经无量纲化）。现在不动点要解二次方程：</p>
+      <span class="a formula">x² − x + h = 0  ⟹  x* = [1 ± √(1 − 4h)] / 2</span>
+      <p class="a p">判别式一出现，故事就分成三段。判据是 <em>h</em> 与 1/4 的比较，而 1/4 正是 <em>x</em>(1 − <em>x</em>) 的最大值：</p>
+      <div class="split" style="margin-top:16px;gap:clamp(14px,2vw,26px)">
+        <div class="a card" style="border-color:rgba(79,191,168,.30)">
+          <h4 style="color:#a9e6d8">h &lt; 1/4</h4>
+          <p>两个不动点：大的那个稳定（可持续产量），小的那个不稳定（<strong>阈值</strong>）。种群掉到阈值以下，就再也回不到大的那个——同样的方程，两种终局。</p>
+        </div>
+        <div class="a card" style="border-color:rgba(232,176,75,.32)">
+          <h4 style="color:#f3d79a">h = 1/4</h4>
+          <p>两个零点合成一个：<em>x*</em> = 1/2，<strong>半稳定</strong>。这是临界时刻，收割量正好等于种群的最大自我补充速率。</p>
+        </div>
+        <div class="a card" style="border-color:rgba(217,83,74,.35)">
+          <h4 style="color:#ffb4a6">h &gt; 1/4</h4>
+          <p>没有不动点。<em>ẋ</em> 处处为负，种群必然崩溃。<strong>能不能收，取决于 h 是否超过系统自身的再生能力</strong>，这件事与初始种群多大无关。</p>
+        </div>
+      </div>
+      <p class="a p" style="margin-top:16px">这就是第 3 章"鞍结分岔"（saddle-node bifurcation）的原型：参数越过临界值，两个不动点相撞、一起消失。这里先记住形状，第 3 章给它正式名字。</p>
+    </div>
+    <div class="pfoot">§2.3 种群增长</div>
+  </section>
+
+  <!-- ========== 12 §2.4 线性稳定性分析 ========== -->
+  <section class="page" data-title="只在小范围内，把曲线拉直">
+    <div class="page-inner">
+      <div class="a kicker">§2.4 · 线性稳定性分析</div>
+      <h2 class="a">只在小范围内，把曲线拉直</h2>
+      <p class="a p">有一只更快的办法判稳，不必每次都画图。设 <em>x*</em> 是零点，把状态写成 <em>x</em> = <em>x*</em> + <em>η</em>，其中 <em>η</em> 是"离开平衡点多少"，很小。泰勒展开到一阶：</p>
+      <span class="a formula">f(x* + η) = f(x*) + η f′(x*) + O(η²) = η f′(x*) + O(η²)</span>
+      <p class="a p">代回方程，并把 <em>η̇</em> = <em>ẋ</em> 用上：<em>η̇</em> = <em>f′(x*)η</em> + <em>O</em>(<em>η</em>²)。丢掉高阶项，得到<strong>线性化方程</strong>：</p>
+      <span class="a formula">η̇ = λη ，  λ = f′(x*)</span>
+      <p class="a p">它只有指数解 <em>η(t)</em> = <em>η</em>₀<em>e<sup>λt</sup></em>。于是判据成了三个字：</p>
+      <div class="split" style="margin-top:6px;gap:14px">
+        <div class="a card" style="border-color:rgba(79,191,168,.35)"><h4 style="color:#a9e6d8">λ &lt; 0 → 稳定</h4><p>扰动单调压回 0。<em>f</em> 在该点斜率为负：谷底。</p></div>
+        <div class="a card" style="border-color:rgba(255,151,112,.35)"><h4 style="color:#ffc0a8">λ &gt; 0 → 不稳定</h4><p>扰动指数放大。<em>f</em> 斜率为正：山顶。</p></div>
+        <div class="a card" style="border-color:rgba(139,149,164,.40)"><h4 style="color:#c3cad6">λ = 0 → 判据失效</h4><p>线性项消失，答案在更高阶项里。下一页专讲。</p></div>
+      </div>
+      <p class="a p" style="margin-top:16px">"只看一阶"之所以合法，靠的是<strong>连续可微</strong>：<em>f′</em> 在 <em>x*</em> 附近连续，高阶项比 <em>η</em> 更快趋于 0，不会在 <em>η</em> 很小时翻盘。（二维里这条升格成 Hartman–Grobman 定理，第 6 章。）</p>
+      <p class="a p"><em>λ</em> 还有一个物理读法：<strong>1/|<em>λ</em>| 是特征时间</strong>。<em>λ</em> = −4 意味着误差每 0.25 个时间单位衰减到 1/<em>e</em>（1/|<em>λ</em>| = 0.25）。所以"稳定"是定性的，"多久稳下来"要另外报数。</p>
+    </div>
+    <div class="pfoot">§2.4 线性稳定性分析</div>
+  </section>
+
+  <!-- ========== 13 §2.4 λ=0 的时候 ========== -->
+  <section class="page" data-title="斜率是零，判据说不出话">
+    <div class="page-inner">
+      <div class="a kicker">§2.4 · 当 λ = 0</div>
+      <h2 class="a">斜率是零，判据说不出话</h2>
+      <p class="a p"><em>λ</em> = 0 说明线性项不存在，命运由<strong>第一个非零的高阶项</strong>决定。原书例题 2.4.3 用四个例子（图 2.4.1），正好把一阶判据的三处死角都占了：</p>
+      <div class="split" style="margin-top:16px">
+        <div class="a card">
+          <h4>(a) ẋ = −x³ → 稳定，但慢</h4>
+          <p><em>x</em> &gt; 0 时 <em>ẋ</em> &lt; 0，<em>x</em> &lt; 0 时 <em>ẋ</em> &gt; 0，两侧都回来。<strong>收敛是代数式的</strong>（<em>x</em> ~ <em>t</em><sup>−1/2</sup>），不是指数式：同样靠近，指数式有个"永远到不了"的尾巴，代数式慢得多，但没有时间尺度。</p>
+        </div>
+        <div class="a card">
+          <h4>(b) ẋ = x³ → 不稳定</h4>
+          <p>两侧都被推走，而且越推越快（幂律爆破，同样会在有限时间内跑到无穷）。</p>
+        </div>
+        <div class="a card">
+          <h4>(c) ẋ = x² → 半稳定</h4>
+          <p>一侧进、一侧出。上一页的图讲的就是它。</p>
+        </div>
+        <div class="a card">
+          <h4>(d) ẋ = 0 → 整条线都是不动点</h4>
+          <p>每个点都不孤立。稳定性、吸引性这类定点词汇全部失效：扰动停在原地，既不放大也不衰减。</p>
+        </div>
+      </div>
+      <div class="a pull">f′(x*) = 0 时，出错的不是判据，是"一阶信息"本身不够用。此刻必须回到 f 的符号，或者去看高阶导数。<cite>这条教训在后面每一章都会重演：判据失效的地方，正是新现象出现的地方（第 3 章的分岔全部发生在 λ = 0）。</cite></div>
+    </div>
+    <div class="pfoot">§2.4 线性稳定性分析</div>
+  </section>
+
+  <!-- ========== 14 完整推导 1 · f′ 判据 ========== -->
+  <section class="page" data-title="完整推导 · f′ 判据为什么成立">
+    <div class="page-inner">
+      <div class="a kicker">PROOF 01 · 完整推导</div>
+      <h2 class="a">f′(x*) &lt; 0 为什么真的能保证稳定</h2>
+      <details class="a" open style="margin-top:16px">
+        <summary><span class="tag blue">完整推导</span>要证的事 + 四步 + 边界</summary>
+        <div class="body proofs">
+          <p><b>要证．</b>设 <em>f</em> 连续可微，<em>f(x*)</em> = 0，<em>λ</em> = <em>f′(x*)</em> &lt; 0。则存在 <em>δ</em> &gt; 0，使得 |<em>η</em>₀| &lt; <em>δ</em> 时，解 <em>η(t)</em> → 0（<em>t</em> → ∞），而且是指数式地趋于 0。</p>
+          <p><span class="stepnum">0</span><b>出发点．</b>方程是 <em>η̇</em> = <em>f(x*+η)</em>，记 <em>F(η)</em> = <em>f(x*+η)</em>，则 <em>F(0)</em> = 0、<em>F′(0)</em> = <em>λ</em>。</p>
+          <p><span class="stepnum">1</span><b>取一个严格负的上界．</b>因 <em>F′</em> 在 0 处连续且 <em>F′(0)</em> = <em>λ</em> &lt; 0，取 <em>a</em> &gt; 0 使 |<em>η</em>| ≤ <em>a</em> 时 <em>F′(η)</em> ≤ <em>λ</em>/2。合法，因为连续性能保证邻域内的值离 <em>λ</em> 任意近，而 <em>λ</em> 与 0 之间有空隙，<em>λ</em>/2 就落在这个空隙里。</p>
+          <p><span class="stepnum">2</span><b>正半轨出不去，而且是指数地出不去．</b>设 0 &lt; <em>η</em>₀ &lt; <em>a</em>。只要 <em>η</em> 还在 (0, <i>a</i>) 内，中值定理给出 <em>η̇</em> = <em>F(η)</em> = <em>F′(ξ)η</em> ≤ (<em>λ</em>/2)<em>η</em> &lt; 0，所以 <em>η</em> 严格递减。再把两边除以 <em>η</em> &gt; 0：<em>d</em>(ln <em>η</em>)/<em>dt</em> = <em>η̇</em>/<em>η</em> ≤ <em>λ</em>/2，积分得 <em>η(t)</em> ≤ <em>η</em>₀<em>e</em><sup>(<em>λ</em>/2)<em>t</em></sup>。这个不等式顺带证明了<strong>η 永远碰不到 0</strong>：若在某个有限时刻 <em>T</em> 首次相碰，则 <em>t</em> → <em>T</em>⁻ 时 ln <em>η</em> → −∞，与 ln <em>η(t)</em> ≤ ln <em>η</em>₀ + (<em>λ</em>/2)<em>T</em>（有限）矛盾。于是整条半轨都留在 (0, <i>a</i>)。<em>η</em>₀ &lt; 0 时对 −<em>η</em> 用同一论证（方程关于 <em>η</em> → −<em>η</em> 不必对称，但 <em>η̇</em> = <em>F′(ξ)η</em> 中 <em>η</em> &lt; 0、<em>F′</em> ≤ <em>λ</em>/2 &lt; 0，故 <em>η̇</em> &gt; 0，<em>η</em> 递增且趋近 0）。</p>
+          <p><span class="stepnum">3</span><b>极限只能是 0．</b><em>η</em> 单调有界，故极限 <em>ℓ</em> 存在。若 <em>ℓ</em> &gt; 0，则 <em>η̇</em> ≤ (<em>λ</em>/2)<em>ℓ</em> &lt; 0 恒成立，<em>η</em> 会一直往下掉，矛盾。故 <em>ℓ</em> = 0。</p>
+          <p><span class="stepnum">4</span><b>速率．</b>第 2 步已经给出一致上界 <em>η(t)</em> ≤ <em>η</em>₀<em>e</em><sup>(<em>λ</em>/2)<em>t</em></sup>：至少以 2/|<em>λ</em>| 为特征时间指数衰减（真实速率是 1/|<em>λ</em>|，见下面的退化自检）。</p>
+          <p><b>退化自检．</b>取线性情形 <em>f</em> = <em>λx</em>，严格解是 <em>η</em>₀<em>e<sup>λt</sup></em>；上面的上界给出 <em>e</em><sup>(<em>λ</em>/2)<em>t</em></sup>，同一个结论、常数更保守（2/|<em>λ</em>| ≥ 1/|<em>λ</em>|）。再退化到 <em>λ</em> → 0⁻，"严格负上界"取不到，第 1 步直接崩——这正是判据失效的机理。</p>
+          <p><b>失效边界．</b>① <em>f</em> 必须连续可微，尖点处（<em>ẋ</em> = |<em>x</em>|）不适用；② 结论是局部的，<em>δ</em> 可能极小，吸引域之外照样跑掉；③ <em>λ</em> = 0 无话可说，要换高阶项或符号法；④ 证明只用了一侧不等式，反方向（<em>λ</em> &gt; 0 ⇒ 不稳定）把时间倒着走一遍即得。</p>
+        </div>
+      </details>
+    </div>
+    <div class="pfoot">§2.4 线性稳定性分析</div>
+  </section>
+
+  <!-- ========== 15 §2.5 存在性与唯一性 ========== -->
+  <section class="page" data-title="先问一句：解真的存在吗">
+    <div class="page-inner">
+      <div class="a kicker">§2.5 · 存在性与唯一性</div>
+      <h2 class="a">先问一句：解真的存在吗？</h2>
+      <p class="a p">到这里为止，我们一直默认一件事：从某个初值出发，有<strong>一条</strong>确定的轨迹。这个默认需要一张许可证。原书的态度很诚实——前面几节对向量场的处理相当不正式。</p>
+      <div class="a card" style="border-color:rgba(98,208,255,.28);margin:16px 0">
+        <h4 style="color:#bfe6ff">定理（局部存在唯一性）</h4>
+        <p>若 <em>f(x)</em> 连续且满足<strong>李普希茨条件</strong>（Lipschitz condition）——存在常数 <em>L</em>，使任意 <em>x</em>、<em>y</em> 都有 |<em>f(x)</em> − <em>f(y)</em>| ≤ <em>L</em>|<em>x</em> − <em>y</em>|——则对任意初值 <em>x</em>(0) = <em>x</em>₀，存在一个时间区间 (−<em>τ</em>, <em>τ</em>) 上<strong>唯一</strong>的解。</p>
+      </div>
+      <p class="a p"><em>f</em> 连续可微就足够：中值定理给出 |<em>f(x)</em> − <em>f(y)</em>| = |<em>f′(ξ)</em>|·|<em>x</em> − <em>y</em>|，取 <em>L</em> = max|<em>f′</em>| 即可。李普希茨比"连续"强，比"可微"弱——中间那条缝里就藏着反例。</p>
+      <p class="a p">注意定理只说"局部"：<em>τ</em> 可能很小，甚至解会在有限时间内跑到无穷。所以它保证的是<strong>短时间内的确定性</strong>，不是"永远有定义"。</p>
+      <p class="a p">这条定理最值钱的翻译是几何的：<strong>向量场不交叉</strong>。两条轨迹若在某一时刻相遇，此后必须完全重合。第 1 章推导 1 里那句"相轨迹不相交"，正式依据就在这儿。</p>
+    </div>
+    <div class="pfoot">§2.5 存在性与唯一性</div>
+  </section>
+
+  <!-- ========== 16 §2.5 √x 反例 ========== -->
+  <section class="page" data-title="一个初值，三条未来">
+    <div class="page-inner">
+      <div class="split rev">
+        <div class="a fig">
+          <!--FIG:D-->
+<svg viewBox="0 0 480 320" role="img" aria-label="ẋ = √x 在原点处的非唯一性"><line x1="52.0" y1="250.0" x2="460.0" y2="250.0" stroke="rgba(255,255,255,.22)" stroke-width="1.2"/><line x1="52.0" y1="250.0" x2="52.0" y2="32.0" stroke="rgba(255,255,255,.22)" stroke-width="1.2"/><text x="454.0" y="242.0" fill="#8b95a4" font-size="11" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">t</text><text x="40.0" y="38.0" fill="#8b95a4" font-size="11" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">x</text><line x1="52.0" y1="210.4" x2="456.0" y2="210.4" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="46.0" y="213.9" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">1</text><line x1="52.0" y1="170.7" x2="456.0" y2="170.7" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="46.0" y="174.2" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">2</text><line x1="52.0" y1="131.1" x2="456.0" y2="131.1" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="46.0" y="134.6" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">3</text><line x1="52.0" y1="91.5" x2="456.0" y2="91.5" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="46.0" y="95.0" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">4</text><line x1="52.0" y1="51.9" x2="456.0" y2="51.9" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="46.0" y="55.4" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">5</text><line x1="132.8" y1="250.0" x2="132.8" y2="36.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="132.8" y="264.0" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">1</text><line x1="213.6" y1="250.0" x2="213.6" y2="36.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="213.6" y="264.0" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">2</text><line x1="294.4" y1="250.0" x2="294.4" y2="36.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="294.4" y="264.0" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">3</text><line x1="375.2" y1="250.0" x2="375.2" y2="36.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="375.2" y="264.0" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">4</text><line x1="456.0" y1="250.0" x2="456.0" y2="36.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="456.0" y="264.0" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">5</text><path d="M52.0 250.0 L456.0 250.0" fill="none" stroke="#ff9770" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/><path d="M52.0 250.0 L56.0 250.0 L60.1 249.9 L64.1 249.8 L68.2 249.6 L72.2 249.4 L76.2 249.1 L80.3 248.8 L84.3 248.4 L88.4 248.0 L92.4 247.5 L96.4 247.0 L100.5 246.4 L104.5 245.8 L108.6 245.1 L112.6 244.4 L116.6 243.7 L120.7 242.8 L124.7 242.0 L128.8 241.1 L132.8 240.1 L136.8 239.1 L140.9 238.0 L144.9 236.9 L149.0 235.7 L153.0 234.5 L157.0 233.3 L161.1 231.9 L165.1 230.6 L169.2 229.2 L173.2 227.7 L177.2 226.2 L181.3 224.6 L185.3 223.0 L189.4 221.4 L193.4 219.7 L197.4 217.9 L201.5 216.1 L205.5 214.2 L209.6 212.3 L213.6 210.4 L217.6 208.4 L221.7 206.3 L225.7 204.2 L229.8 202.0 L233.8 199.8 L237.8 197.6 L241.9 195.3 L245.9 192.9 L250.0 190.5 L254.0 188.1 L258.0 185.6 L262.1 183.0 L266.1 180.4 L270.2 177.8 L274.2 175.1 L278.2 172.3 L282.3 169.5 L286.3 166.7 L290.4 163.8 L294.4 160.8 L298.4 157.8 L302.5 154.8 L306.5 151.7 L310.6 148.5 L314.6 145.4 L318.6 142.1 L322.7 138.8 L326.7 135.5 L330.8 132.1 L334.8 128.6 L338.8 125.1 L342.9 121.6 L346.9 118.0 L351.0 114.4 L355.0 110.7 L359.0 106.9 L363.1 103.1 L367.1 99.3 L371.2 95.4 L375.2 91.5 L379.2 87.5 L383.3 83.5 L387.3 79.4 L391.4 75.2 L395.4 71.0 L399.4 66.8 L403.5 62.5 L407.5 58.2 L411.6 53.8" fill="none" stroke="#62d0ff" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/><path d="M213.6 250.0 L217.6 250.0 L221.7 249.9 L225.7 249.8 L229.8 249.6 L233.8 249.4 L237.8 249.1 L241.9 248.8 L245.9 248.4 L250.0 248.0 L254.0 247.5 L258.0 247.0 L262.1 246.4 L266.1 245.8 L270.2 245.1 L274.2 244.4 L278.2 243.7 L282.3 242.8 L286.3 242.0 L290.4 241.1 L294.4 240.1 L298.4 239.1 L302.5 238.0 L306.5 236.9 L310.6 235.7 L314.6 234.5 L318.6 233.3 L322.7 231.9 L326.7 230.6 L330.8 229.2 L334.8 227.7 L338.8 226.2 L342.9 224.6 L346.9 223.0 L351.0 221.4 L355.0 219.7 L359.0 217.9 L363.1 216.1 L367.1 214.2 L371.2 212.3 L375.2 210.4 L379.2 208.4 L383.3 206.3 L387.3 204.2 L391.4 202.0 L395.4 199.8 L399.4 197.6 L403.5 195.3 L407.5 192.9 L411.6 190.5 L415.6 188.1 L419.6 185.6 L423.7 183.0 L427.7 180.4 L431.8 177.8 L435.8 175.1 L439.8 172.3 L443.9 169.5 L447.9 166.7 L452.0 163.8 L456.0 160.8" fill="none" stroke="rgba(98,208,255,.62)" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/><circle cx="52.0" cy="250.0" r="5.6" fill="#e8b04b" stroke="#e8b04b" stroke-width="1.4"/><text x="61.0" y="266.0" fill="#e8b04b" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">初值 (0, 0)</text><text x="262.1" y="180.7" fill="#62d0ff" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">x = t²/4</text><text x="334.8" y="242.1" fill="rgba(98,208,255,.85)" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">x = (t−2)²/4</text><text x="286.3" y="243.0" fill="#ff9770" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">x ≡ 0</text><text x="52.0" y="288.0" fill="#5c6775" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">三条曲线都满足 ẋ = √x 且都过 (0,0)：初值不再决定未来。</text></svg>
+<!--END:D-->
+          <div class="figcap">三条曲线都过 (0, 0)，都满足 <em>ẋ</em> = √<em>x</em>。金点是初值。非唯一性只发生在 <em>f</em> 不可微的那一点上；只要 <em>x</em>₀ &gt; 0，解就唯一。</div>
+        </div>
+        <div>
+          <div class="a kicker">§2.5 · 唯一性会失手</div>
+          <h2 class="a">一个初值，三条未来</h2>
+          <p class="a p">方程 <em>ẋ</em> = √<em>x</em>，初值 <em>x</em>(0) = 0。李普希茨条件在这里失效：<em>f′(x)</em> = 1/(2√<em>x</em>) 在 0 处发散，<em>L</em> 取不到。</p>
+          <p class="a p">于是唯一性真的坏了。至少有三条解：</p>
+          <p class="a p">① <em>x</em> ≡ 0：一直不动。<br>
+             ② <em>x</em> = <em>t</em>²/4（<em>t</em> ≥ 0）。<br>
+             ③ 任意 <em>t</em>₀ ≥ 0 的<strong>拼接</strong>：先 <em>x</em> = 0 待够 <em>t</em>₀，再沿 <em>x</em> = (<em>t</em> − <em>t</em>₀)²/4 走。</p>
+          <p class="a p">逐条验：<em>d</em>/<em>dt</em>(<em>t</em>²/4) = <em>t</em>/2，而 √<em>x</em> = √(<em>t</em>²/4) = <em>t</em>/2 ✓。所以它确实满足方程。</p>
+          <p class="a p">物理含义：在 <em>x</em> = 0 这个点上，推动力是零，但它离开零的"恢复陡度"是无穷大，于是系统可以在那里<strong>待任意久再出发</strong>。凡是模型里出现 √、<em>x</em><sup>1/3</sup>、"接触即粘住"的地方，都要留这个心眼。</p>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§2.5 存在性与唯一性</div>
+  </section>
+
+  <!-- ========== 17 §2.5 有限时间爆破 ========== -->
+  <section class="page" data-title="不是算错，是模型越界">
+    <div class="page-inner">
+      <div class="split">
+        <div>
+          <div class="a kicker">§2.5 · 解可以"活不到"未来</div>
+          <h2 class="a">有限时间爆破：不是算错，是模型越界</h2>
+          <p class="a p">方程 <em>ẋ</em> = 1 + <em>x</em>²，<em>x</em>(0) = 0。分离变量：<em>dx</em>/(1 + <em>x</em>²) = <em>dt</em>，积分得 arctan <em>x</em> = <em>t</em>，于是</p>
+          <span class="a formula">x(t) = tan t ，  t ∈ (−π/2, π/2)</span>
+          <p class="a p">解存在、唯一、光滑——只是它的定义域只有这么长。它在 <em>t</em> = π/2 之前跑向无穷，那个时刻<strong>到不了</strong>。</p>
+          <p class="a p">判别办法：看 <em>∫ dx</em>/<em>f(x)</em> 是否收敛。∫₀<sup><em>X</em></sup> <em>dx</em>/(1 + <em>x</em>²) = arctan <em>X</em> → π/2，收敛，所以"跑到无穷"只需要有限的时间。反之，若 <em>f</em> 在远处的增长不超过线性，积分发散，解就活得下去。</p>
+          <p class="a p">逻辑斯谛为什么不会爆破？因为在 <em>x</em> &gt; <em>K</em> 时 <em>f</em> 已经变负，<strong>负反馈自己把自己拽住了</strong>。这就是饱和项的价值。</p>
+          <p class="a p">教训：数值积分里的"发散"不一定是代码错，可能是模型真的在这一刻失去了意义。判断依据是模型假设，不是程序。</p>
+        </div>
+        <div class="a fig">
+          <!--FIG:E-->
+<svg viewBox="0 0 480 320" role="img" aria-label="有限时间爆破：ẋ = 1 + x²"><line x1="54.0" y1="230.9" x2="456.0" y2="230.9" stroke="rgba(255,255,255,.22)" stroke-width="1.2"/><line x1="54.0" y1="250.0" x2="54.0" y2="30.0" stroke="rgba(255,255,255,.22)" stroke-width="1.2"/><text x="450.0" y="223.9" fill="#8b95a4" font-size="11" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">t</text><text x="62.0" y="36.0" fill="#8b95a4" font-size="11" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">x</text><line x1="153.5" y1="250.0" x2="153.5" y2="34.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="153.5" y="264.0" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">0.5</text><line x1="253.0" y1="250.0" x2="253.0" y2="34.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="253.0" y="264.0" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">1</text><line x1="352.5" y1="250.0" x2="352.5" y2="34.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="352.5" y="264.0" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">1.5</text><line x1="54.0" y1="167.4" x2="452.0" y2="167.4" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="48.0" y="170.9" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">2</text><line x1="54.0" y1="103.9" x2="452.0" y2="103.9" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="48.0" y="107.4" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">4</text><line x1="54.0" y1="40.4" x2="452.0" y2="40.4" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="48.0" y="43.9" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">6</text><path d="M54.0 230.9 L56.4 230.6 L58.9 230.2 L61.3 229.8 L63.7 229.4 L66.1 229.0 L68.6 228.6 L71.0 228.2 L73.4 227.8 L75.9 227.4 L78.3 227.0 L80.7 226.7 L83.1 226.3 L85.6 225.9 L88.0 225.5 L90.4 225.1 L92.8 224.7 L95.3 224.3 L97.7 223.9 L100.1 223.4 L102.6 223.0 L105.0 222.6 L107.4 222.2 L109.8 221.8 L112.3 221.4 L114.7 220.9 L117.1 220.5 L119.6 220.1 L122.0 219.6 L124.4 219.2 L126.8 218.8 L129.3 218.3 L131.7 217.9 L134.1 217.4 L136.6 217.0 L139.0 216.5 L141.4 216.0 L143.8 215.5 L146.3 215.1 L148.7 214.6 L151.1 214.1 L153.6 213.6 L156.0 213.1 L158.4 212.6 L160.8 212.0 L163.3 211.5 L165.7 211.0 L168.1 210.4 L170.5 209.9 L173.0 209.3 L175.4 208.7 L177.8 208.2 L180.3 207.6 L182.7 207.0 L185.1 206.3 L187.5 205.7 L190.0 205.1 L192.4 204.4 L194.8 203.8 L197.3 203.1 L199.7 202.4 L202.1 201.7 L204.5 201.0 L207.0 200.2 L209.4 199.5 L211.8 198.7 L214.3 197.9 L216.7 197.1 L219.1 196.2 L221.5 195.4 L224.0 194.5 L226.4 193.6 L228.8 192.6 L231.2 191.7 L233.7 190.7 L236.1 189.6 L238.5 188.6 L241.0 187.5 L243.4 186.4 L245.8 185.2 L248.2 184.0 L250.7 182.7 L253.1 181.4 L255.5 180.1 L258.0 178.7 L260.4 177.2 L262.8 175.7 L265.2 174.1 L267.7 172.4 L270.1 170.6 L272.5 168.8 L275.0 166.9 L277.4 164.9 L279.8 162.8 L282.2 160.5 L284.7 158.2 L287.1 155.7 L289.5 153.1 L291.9 150.3 L294.4 147.3 L296.8 144.1 L299.2 140.7 L301.7 137.1 L304.1 133.1 L306.5 128.9 L308.9 124.4 L311.4 119.4 L313.8 114.0 L316.2 108.1 L318.7 101.6 L321.1 94.5 L323.5 86.5 L325.9 77.6 L328.4 67.6 L330.8 56.2 L333.2 43.3" fill="none" stroke="#62d0ff" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round"/><line x1="366.6" y1="250.0" x2="366.6" y2="34.0" stroke="rgba(232,176,75,.5)" stroke-width="1.2" stroke-dasharray="5 4"/><text x="358.6" y="50.0" fill="#e8b04b" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">t = π/2</text><text x="358.6" y="64.0" fill="#e8b04b" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">永远到不了</text><line x1="54.0" y1="230.9" x2="113.7" y2="221.4" stroke="rgba(255,151,112,.55)" stroke-width="1.0"/><line x1="113.7" y1="221.4" x2="173.4" y2="211.0" stroke="rgba(255,151,112,.55)" stroke-width="1.0"/><line x1="173.4" y1="211.0" x2="233.1" y2="197.7" stroke="rgba(255,151,112,.55)" stroke-width="1.0"/><line x1="233.1" y1="197.7" x2="292.8" y2="177.8" stroke="rgba(255,151,112,.55)" stroke-width="1.0"/><line x1="292.8" y1="177.8" x2="352.5" y2="141.6" stroke="rgba(255,151,112,.55)" stroke-width="1.0"/><line x1="352.5" y1="141.6" x2="412.2" y2="56.8" stroke="rgba(255,151,112,.55)" stroke-width="1.0"/><text x="73.9" y="128.5" fill="#62d0ff" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">x = tan t</text><text x="64.0" y="63.4" fill="#ff9770" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">橙色折线：欧拉法（h = 0.3）</text><text x="54.0" y="288.0" fill="#5c6775" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">解在 π/2 之前跑向无穷：方程本身没坏，是模型出了它的适用范围。</text></svg>
+<!--END:E-->
+          <div class="figcap">蓝线是精确解 tan <em>t</em>，虚线是它永远到不了的 π/2。橙色折线是步长 <em>h</em> = 0.3 的欧拉法：它照样越过去，但越过的位置和斜率都不对——数值方法不会告诉你模型已经越界。</div>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§2.5 存在性与唯一性</div>
+  </section>
+
+  <!-- ========== 18 §2.6 振动的不可能性 ========== -->
+  <section class="page" data-title="一维流不能振荡，一个单调性就够了">
+    <div class="page-inner">
+      <div class="a kicker">§2.6 · 振动的不可能性</div>
+      <h2 class="a">一维流不能振荡，一个单调性就够了</h2>
+      <p class="a p">第 1 章的演示里说过一句"一维永远振荡不起来"（<a href="01-概述.html" style="color:var(--gold)">第 1 章</a>只给了直观）。这里给证明——它比想象中短。</p>
+      <p class="a p"><strong>反证。</strong>设存在<strong>非恒定</strong>的周期解，周期 <em>T</em> &gt; 0，取值落在 [<em>m</em>, <em>M</em>] 上，且 <em>m</em> &lt; <em>M</em>。</p>
+      <p class="a p"><span class="stepnum">1</span>在取到最大值 <em>M</em> 的时刻 <em>t</em>₁ 上，<em>ẋ</em>(<em>t</em>₁) = 0，即 <em>f(M)</em> = 0；同理 <em>f(m)</em> = 0。<strong>两个极值点都是不动点。</strong></p>
+      <p class="a p"><span class="stepnum">2</span>把 <em>f</em> 在 [<em>m</em>, <em>M</em>] 上的零点按大小排开。相邻两个零点之间 <em>f</em> 的符号不变，所以在每一小段内部 <em>x(t)</em> <strong>严格单调</strong>：要么一直增，要么一直减。又因为<strong>零点本身是不动点，轨线不能穿过它</strong>（§2.5 的唯一性：穿过就意味着同一点上有两条轨线），所以周期解只能整段住在某两个相邻零点之间。</p>
+      <p class="a p"><span class="stepnum">3</span>可它必须离开某个点再回到它，也就是必须在所住的那一段里<strong>折返</strong>——与"段内严格单调"矛盾。若它整段停在一个零点上，那它就是恒定的，同样被排除。</p>
+      <p class="a p">所以：一维<strong>自治</strong>流的解要么趋于不动点，要么跑向无穷，没有第三条路。而且趋于不动点是<strong>单调</strong>的——它会越来越近，<strong>不会冲过目标再荡回来</strong>（不超调，zero overshoot）。这一条正是原书在本节强调的：没有超调，就没有振动；「未受迫时不可能自振」正是它的推论。<strong>旋转与振荡都需要一个环</strong>——圆周上的流（第 4 章）或者相平面上的闭轨（第 6、7 章）。</p>
+      <p class="a p">前提不能省：<strong>自治</strong>（<em>f</em> 不显含 <em>t</em>）。缺了它反例随手可得：<em>ẋ</em> = cos <em>t</em> 也是一维方程，解 <em>x</em> = sin <em>t</em> 照样周期振荡——真实世界的"一维振动"几乎都是这样骗人的，它在方程里偷偷藏了时间。<strong>连续</strong>则是第 2 步"符号不变"的技术前提：不连续时零点可能有无穷多个，区间根本切不开。</p>
+    </div>
+    <div class="pfoot">§2.6 振动的不可能性</div>
+  </section>
+
+  <!-- ========== 19 §2.7 势 ========== -->
+  <section class="page" data-title="给这条线配一个地形">
+    <div class="page-inner">
+      <div class="split">
+        <div>
+          <div class="a kicker">§2.7 · 势</div>
+          <h2 class="a">给这条线配一个地形</h2>
+          <p class="a p">如果能找到一个函数 <em>V(x)</em>，使 <em>f(x)</em> = −<em>dV</em>/<em>dx</em>，那么方程就能改写成一句话：</p>
+          <span class="a formula">ẋ = −V′(x) ，  V(x) = −∫ f(s) ds</span>
+          <p class="a p"><em>V</em> 叫<strong>势</strong>（potential，也叫势能）。一维之下它总能找到：取个积分下限积出来就是。<strong>二维以上一般不行</strong>——那是"保守系统"才有的运气（第 6 章）。</p>
+          <p class="a p">于是方程变成一句直觉：<strong>速度正比于负的坡度</strong>。系统像一颗滚下山的球，而且是<strong>过阻尼</strong>地滚——没有惯性，不会冲过谷底，不会来回晃。</p>
+          <p class="a p">从图上直接读：<em>V</em> 的谷底 = 稳定不动点；<em>V</em> 的山顶 = 不稳定不动点；<em>V</em> 的一整段平地 = <em>ẋ</em> = 0 的那段不动点。<em>f</em> 的零点就是 <em>V</em> 的极值点——<strong>同一个事实的两种画法</strong>。</p>
+        </div>
+        <div class="a fig">
+          <!--FIG:F-->
+<svg viewBox="0 0 480 320" role="img" aria-label="势能景观：f = −dV/dx"><line x1="56.0" y1="92.0" x2="456.0" y2="92.0" stroke="rgba(255,255,255,.22)" stroke-width="1.1"/><line x1="254.0" y1="150.0" x2="254.0" y2="32.0" stroke="rgba(255,255,255,.22)" stroke-width="1.1"/><path d="M56.0 36.0 L58.2 39.3 L60.4 42.6 L62.6 45.7 L64.8 48.8 L67.0 51.8 L69.2 54.7 L71.4 57.5 L73.6 60.2 L75.8 62.8 L78.0 65.4 L80.2 67.8 L82.4 70.2 L84.6 72.5 L86.8 74.8 L89.0 76.9 L91.2 79.0 L93.4 81.0 L95.6 82.9 L97.8 84.8 L100.0 86.6 L102.2 88.3 L104.4 89.9 L106.6 91.5 L108.8 93.0 L111.0 94.4 L113.2 95.8 L115.4 97.1 L117.6 98.3 L119.8 99.5 L122.0 100.6 L124.2 101.7 L126.4 102.7 L128.6 103.6 L130.8 104.5 L133.0 105.3 L135.2 106.0 L137.4 106.8 L139.6 107.4 L141.8 108.0 L144.0 108.5 L146.2 109.0 L148.4 109.5 L150.6 109.9 L152.8 110.2 L155.0 110.5 L157.2 110.8 L159.4 111.0 L161.6 111.2 L163.8 111.3 L166.0 111.4 L168.2 111.4 L170.4 111.4 L172.6 111.4 L174.8 111.3 L177.0 111.2 L179.2 111.0 L181.4 110.8 L183.6 110.6 L185.8 110.4 L188.0 110.1 L190.2 109.8 L192.4 109.4 L194.6 109.1 L196.8 108.7 L199.0 108.3 L201.2 107.8 L203.4 107.3 L205.6 106.8 L207.8 106.3 L210.0 105.8 L212.2 105.2 L214.4 104.6 L216.6 104.0 L218.8 103.4 L221.0 102.8 L223.2 102.1 L225.4 101.5 L227.6 100.8 L229.8 100.1 L232.0 99.4 L234.2 98.7 L236.4 98.0 L238.6 97.2 L240.8 96.5 L243.0 95.8 L245.2 95.0 L247.4 94.3 L249.6 93.5 L251.8 92.8 L254.0 92.0 L256.2 91.2 L258.4 90.5 L260.6 89.7 L262.8 89.0 L265.0 88.2 L267.2 87.5 L269.4 86.8 L271.6 86.0 L273.8 85.3 L276.0 84.6 L278.2 83.9 L280.4 83.2 L282.6 82.5 L284.8 81.9 L287.0 81.2 L289.2 80.6 L291.4 80.0 L293.6 79.4 L295.8 78.8 L298.0 78.2 L300.2 77.7 L302.4 77.2 L304.6 76.7 L306.8 76.2 L309.0 75.7 L311.2 75.3 L313.4 74.9 L315.6 74.6 L317.8 74.2 L320.0 73.9 L322.2 73.6 L324.4 73.4 L326.6 73.2 L328.8 73.0 L331.0 72.8 L333.2 72.7 L335.4 72.6 L337.6 72.6 L339.8 72.6 L342.0 72.6 L344.2 72.7 L346.4 72.8 L348.6 73.0 L350.8 73.2 L353.0 73.5 L355.2 73.8 L357.4 74.1 L359.6 74.5 L361.8 75.0 L364.0 75.5 L366.2 76.0 L368.4 76.6 L370.6 77.2 L372.8 78.0 L375.0 78.7 L377.2 79.5 L379.4 80.4 L381.6 81.3 L383.8 82.3 L386.0 83.4 L388.2 84.5 L390.4 85.7 L392.6 86.9 L394.8 88.2 L397.0 89.6 L399.2 91.0 L401.4 92.5 L403.6 94.1 L405.8 95.7 L408.0 97.4 L410.2 99.2 L412.4 101.1 L414.6 103.0 L416.8 105.0 L419.0 107.1 L421.2 109.2 L423.4 111.5 L425.6 113.8 L427.8 116.2 L430.0 118.6 L432.2 121.2 L434.4 123.8 L436.6 126.5 L438.8 129.3 L441.0 132.2 L443.2 135.2 L445.4 138.3 L447.6 141.4 L449.8 144.7 L452.0 148.0" fill="none" stroke="#e8b04b" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/><text x="52.0" y="26.0" fill="#e8b04b" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start" font-weight="700">f(x) = x − x³</text><line x1="56.0" y1="213.0" x2="456.0" y2="213.0" stroke="rgba(255,255,255,.14)" stroke-width="1.0" stroke-dasharray="4 4"/><line x1="254.0" y1="282.0" x2="254.0" y2="188.0" stroke="rgba(255,255,255,.22)" stroke-width="1.1"/><path d="M56.0 231.6 L58.2 235.3 L60.4 238.8 L62.6 242.1 L64.8 245.1 L67.0 248.0 L69.2 250.6 L71.4 253.1 L73.6 255.4 L75.8 257.5 L78.0 259.4 L80.2 261.1 L82.4 262.7 L84.6 264.1 L86.8 265.3 L89.0 266.4 L91.2 267.4 L93.4 268.2 L95.6 268.9 L97.8 269.5 L100.0 269.9 L102.2 270.2 L104.4 270.4 L106.6 270.5 L108.8 270.5 L111.0 270.4 L113.2 270.1 L115.4 269.8 L117.6 269.5 L119.8 269.0 L122.0 268.4 L124.2 267.8 L126.4 267.1 L128.6 266.3 L130.8 265.5 L133.0 264.6 L135.2 263.7 L137.4 262.7 L139.6 261.7 L141.8 260.6 L144.0 259.5 L146.2 258.3 L148.4 257.2 L150.6 256.0 L152.8 254.7 L155.0 253.5 L157.2 252.2 L159.4 250.9 L161.6 249.6 L163.8 248.3 L166.0 246.9 L168.2 245.6 L170.4 244.3 L172.6 243.0 L174.8 241.6 L177.0 240.3 L179.2 239.0 L181.4 237.7 L183.6 236.4 L185.8 235.2 L188.0 233.9 L190.2 232.7 L192.4 231.5 L194.6 230.3 L196.8 229.2 L199.0 228.0 L201.2 226.9 L203.4 225.9 L205.6 224.8 L207.8 223.8 L210.0 222.9 L212.2 222.0 L214.4 221.1 L216.6 220.2 L218.8 219.4 L221.0 218.7 L223.2 218.0 L225.4 217.3 L227.6 216.7 L229.8 216.1 L232.0 215.6 L234.2 215.1 L236.4 214.6 L238.6 214.3 L240.8 213.9 L243.0 213.6 L245.2 213.4 L247.4 213.2 L249.6 213.1 L251.8 213.0 L254.0 213.0 L256.2 213.0 L258.4 213.1 L260.6 213.2 L262.8 213.4 L265.0 213.6 L267.2 213.9 L269.4 214.3 L271.6 214.6 L273.8 215.1 L276.0 215.6 L278.2 216.1 L280.4 216.7 L282.6 217.3 L284.8 218.0 L287.0 218.7 L289.2 219.4 L291.4 220.2 L293.6 221.1 L295.8 222.0 L298.0 222.9 L300.2 223.8 L302.4 224.8 L304.6 225.9 L306.8 226.9 L309.0 228.0 L311.2 229.2 L313.4 230.3 L315.6 231.5 L317.8 232.7 L320.0 233.9 L322.2 235.2 L324.4 236.4 L326.6 237.7 L328.8 239.0 L331.0 240.3 L333.2 241.6 L335.4 243.0 L337.6 244.3 L339.8 245.6 L342.0 246.9 L344.2 248.3 L346.4 249.6 L348.6 250.9 L350.8 252.2 L353.0 253.5 L355.2 254.7 L357.4 256.0 L359.6 257.2 L361.8 258.3 L364.0 259.5 L366.2 260.6 L368.4 261.7 L370.6 262.7 L372.8 263.7 L375.0 264.6 L377.2 265.5 L379.4 266.3 L381.6 267.1 L383.8 267.8 L386.0 268.4 L388.2 269.0 L390.4 269.5 L392.6 269.8 L394.8 270.1 L397.0 270.4 L399.2 270.5 L401.4 270.5 L403.6 270.4 L405.8 270.2 L408.0 269.9 L410.2 269.5 L412.4 268.9 L414.6 268.2 L416.8 267.4 L419.0 266.4 L421.2 265.3 L423.4 264.1 L425.6 262.7 L427.8 261.1 L430.0 259.4 L432.2 257.5 L434.4 255.4 L436.6 253.1 L438.8 250.6 L441.0 248.0 L443.2 245.1 L445.4 242.1 L447.6 238.8 L449.8 235.3 L452.0 231.6" fill="none" stroke="#4fbfa8" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/><text x="52.0" y="182.0" fill="#4fbfa8" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start" font-weight="700">V(x) = x⁴/4 − x²/2</text><circle cx="107.3" cy="270.5" r="4.2" fill="#4fbfa8" stroke="#4fbfa8" stroke-width="1.3"/><text x="107.3" y="261.5" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">谷底</text><circle cx="400.7" cy="270.5" r="4.2" fill="#4fbfa8" stroke="#4fbfa8" stroke-width="1.3"/><text x="400.7" y="261.5" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">谷底</text><circle cx="254.0" cy="213.0" r="4.2" fill="#080b10" stroke="#4fbfa8" stroke-width="1.3"/><text x="254.0" y="229.0" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">山顶</text><line x1="107.3" y1="152.0" x2="107.3" y2="186.0" stroke="rgba(255,255,255,.10)" stroke-width="1.0" stroke-dasharray="3 4"/><line x1="400.7" y1="152.0" x2="400.7" y2="186.0" stroke="rgba(255,255,255,.10)" stroke-width="1.0" stroke-dasharray="3 4"/><text x="56.0" y="304.0" fill="#5c6775" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">上图的零点就是下图的极值；箭头总是朝 V 减小的一侧。</text></svg>
+<!--END:F-->
+          <div class="figcap">上：<em>f(x)</em> = <em>x</em> − <em>x</em>³。下：它的原函数 <em>V(x)</em> = <em>x</em>⁴/4 − <em>x</em>²/2。虚线对齐的是同一个 <em>x</em>：<em>f</em> 的零点 ↔ <em>V</em> 的极值点。这叫双井（double well）。</div>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§2.7 势</div>
+  </section>
+
+  <!-- ========== 20 §2.7 类比的边界 ========== -->
+  <section class="page" data-title="球滚下山，这句话缺了一半">
+    <div class="page-inner">
+      <div class="a kicker">§2.7 · 类比的边界</div>
+      <h2 class="a">"球滚下山"，这句话缺了一半</h2>
+      <p class="a p">真实的球有质量：<em>mẍ</em> = −<em>V′(x)</em> − <em>bẋ</em>。它冲到谷底会<strong>越过去</strong>，于是来回振荡。描述它需要两个状态（位置与速度），属于第 6 章的活。</p>
+      <p class="a p">一维流是<strong>过阻尼极限</strong>：摩擦大到惯性可以忽略，<em>mẍ</em> 里的 <em>m</em> → 0，方程退化成 <em>bẋ</em> = −<em>V′(x)</em>，也就是 <em>ẋ</em> ∝ −<em>V′</em>。所以看到"势能"两个字，别自动加上振荡——那是质量给的，不是势给的。</p>
+      <div class="split" style="margin-top:18px">
+        <div class="a card">
+          <h4>类比成立的地方</h4>
+          <p>· 谷底 = 稳定点，山顶 = 不稳定点<br>
+             · 落差越大，走得越快（速度 ∝ 坡度）<br>
+             · 到了谷底就停住（没有惯性就不会超调）<br>
+             · 势能只会减少：<em>V̇</em> = <em>V′ẋ</em> = −(<em>f</em>)² ≤ 0</p>
+        </div>
+        <div class="a card" style="border-color:rgba(217,83,74,.32)">
+          <h4 style="color:#ffb4a6">类比失真、必须警惕的地方</h4>
+          <p>· "势能的绝对值"没有意义，只有差有意义（<em>V</em> 可以任意加常数）<br>
+             · 真实小球会振荡，一维流不会；把两者混为一谈，就会误判成"有周期解"<br>
+             · 双井之间隔着山顶：确定性地永远翻不过去，<strong>除非加噪声</strong>。而真实系统里，这个"除非"常常是全部内容的来源</p>
+        </div>
+      </div>
+      <p class="a p" style="margin-top:16px">顺带回收 §2.6：<em>V</em> 单调下降，就没有一次回到原位的可能，因此没有周期解。<strong>同一个事实的两种说法</strong>。</p>
+    </div>
+    <div class="pfoot">§2.7 势</div>
+  </section>
+
+  <!-- ========== 21 §2.8 欧拉与 RK4 ========== -->
+  <section class="page" data-title="把连续的时间切成格子">
+    <div class="page-inner">
+      <div class="a kicker">§2.8 · 利用计算机解方程</div>
+      <h2 class="a">把连续的时间切成格子</h2>
+      <p class="a p">一维流大多能解析求解，但二维以上基本不行，所以数值积分是通用工具。最朴素的想法：用差商代替导数，把时间切成 <em>t<sub>n</sub></em> = <em>nh</em>。</p>
+      <div class="split" style="margin-top:14px">
+        <div class="a card" style="border-color:rgba(255,151,112,.30)">
+          <h4 style="color:#ffc0a8">前向欧拉法（forward Euler）</h4>
+          <p><em>x</em><sub>n+1</sub> = <em>x<sub>n</sub></em> + <em>h f</em>(<em>x<sub>n</sub></em>)</p>
+          <p>几何上：站在 <em>x<sub>n</sub></em>，顺着当地的斜率直线走一步。只问一次斜率，误差会一路累积。</p>
+        </div>
+        <div class="a card" style="border-color:rgba(98,208,255,.30)">
+          <h4 style="color:#bfe6ff">四阶龙格–库塔（RK4）</h4>
+          <p><em>k</em>₁ = <em>f</em>(<em>x<sub>n</sub></em>)，<em>k</em>₂ = <em>f</em>(<em>x<sub>n</sub></em> + <em>hk</em>₁/2)，<br>
+             <em>k</em>₃ = <em>f</em>(<em>x<sub>n</sub></em> + <em>hk</em>₂/2)，<em>k</em>₄ = <em>f</em>(<em>x<sub>n</sub></em> + <em>hk</em>₃)</p>
+          <p>一步之内问四次斜率，再按 <strong>1 : 2 : 2 : 1</strong> 加权：<em>x</em><sub>n+1</sub> = <em>x<sub>n</sub></em> + (<em>h</em>/6)(<em>k</em>₁ + 2<em>k</em>₂ + 2<em>k</em>₃ + <em>k</em>₄)。</p>
+        </div>
+      </div>
+      <p class="a p" style="margin-top:18px">为什么权重恰好是 1、2、2、1？下一页末尾的推导会给你答案：它来自泰勒展开的系数匹配。</p>
+      <p class="a p">先记住差别：<strong>同一个方程、同一个终点，步长减半时，欧拉的误差大约减半，RK4 的误差降到十六分之一</strong>。这就是"四阶"两个字的全部含义。</p>
+      <p class="a p">还有一个与精度无关的危险：<strong>稳定性</strong>。欧拉法解 <em>ẋ</em> = −100<em>x</em> 时，必须 <em>h</em> &lt; 0.02 才不发散，否则迭代 <em>x</em><sub>n+1</sub> = (1 − 100<em>h</em>)<em>x<sub>n</sub></em> 的系数绝对值超过 1，误差被放大而不是压回。RK4 的门槛宽一些（<em>λh</em> &gt; −2.79），但同样存在。</p>
+    </div>
+    <div class="pfoot">§2.8 利用计算机解方程</div>
+  </section>
+
+  <!-- ========== 22 §2.8 误差图 ========== -->
+  <section class="page" data-title="双对数图上，斜率就是阶数">
+    <div class="page-inner">
+      <div class="split rev">
+        <div class="a fig">
+          <!--FIG:G-->
+<svg viewBox="0 0 480 320" role="img" aria-label="欧拉法与 RK4 的误差随步长的变化"><line x1="105.3" y1="256.0" x2="105.3" y2="30.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="105.3" y="270.0" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">10^-3</text><line x1="213.7" y1="256.0" x2="213.7" y2="30.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="213.7" y="270.0" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">10^-2</text><line x1="322.0" y1="256.0" x2="322.0" y2="30.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="322.0" y="270.0" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">10^-1</text><line x1="430.3" y1="256.0" x2="430.3" y2="30.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="430.3" y="270.0" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">10^0</text><line x1="62.0" y1="240.9" x2="452.0" y2="240.9" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="56.0" y="244.4" fill="#5c6775" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">10^-12</text><line x1="62.0" y1="210.8" x2="452.0" y2="210.8" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="56.0" y="214.3" fill="#5c6775" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">10^-10</text><line x1="62.0" y1="180.7" x2="452.0" y2="180.7" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="56.0" y="184.2" fill="#5c6775" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">10^-8</text><line x1="62.0" y1="150.5" x2="452.0" y2="150.5" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="56.0" y="154.0" fill="#5c6775" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">10^-6</text><line x1="62.0" y1="120.4" x2="452.0" y2="120.4" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="56.0" y="123.9" fill="#5c6775" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">10^-4</text><line x1="62.0" y1="90.3" x2="452.0" y2="90.3" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="56.0" y="93.8" fill="#5c6775" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">10^-2</text><line x1="62.0" y1="60.1" x2="452.0" y2="60.1" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="56.0" y="63.6" fill="#5c6775" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">10^0</text><line x1="62.0" y1="256.0" x2="456.0" y2="256.0" stroke="rgba(255,255,255,.22)" stroke-width="1.1"/><line x1="62.0" y1="256.0" x2="62.0" y2="26.0" stroke="rgba(255,255,255,.22)" stroke-width="1.1"/><text x="450.0" y="248.0" fill="#8b95a4" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">log h</text><text x="62.0" y="22.0" fill="#8b95a4" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">log |误差|</text><path d="M397.7 106.9 L365.1 107.9 L332.5 110.8 L299.9 114.7 L267.3 118.9 L234.7 123.3 L202.1 127.7 L169.4 132.2 L136.8 136.8 L104.2 141.3 L71.6 145.8" fill="none" stroke="#ff9770" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/><path d="M397.7 122.8 L365.1 143.7 L332.5 163.2 L299.9 181.9 L267.3 200.4 L234.7 218.7 L202.1 236.9 L169.4 255.1 L136.8 256.0 L104.2 256.0 L71.6 256.0" fill="none" stroke="#62d0ff" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/><circle cx="397.7" cy="106.9" r="2.4" fill="#ff9770" stroke="#ff9770" stroke-width="1"/><circle cx="365.1" cy="107.9" r="2.4" fill="#ff9770" stroke="#ff9770" stroke-width="1"/><circle cx="332.5" cy="110.8" r="2.4" fill="#ff9770" stroke="#ff9770" stroke-width="1"/><circle cx="299.9" cy="114.7" r="2.4" fill="#ff9770" stroke="#ff9770" stroke-width="1"/><circle cx="267.3" cy="118.9" r="2.4" fill="#ff9770" stroke="#ff9770" stroke-width="1"/><circle cx="234.7" cy="123.3" r="2.4" fill="#ff9770" stroke="#ff9770" stroke-width="1"/><circle cx="202.1" cy="127.7" r="2.4" fill="#ff9770" stroke="#ff9770" stroke-width="1"/><circle cx="169.4" cy="132.2" r="2.4" fill="#ff9770" stroke="#ff9770" stroke-width="1"/><circle cx="136.8" cy="136.8" r="2.4" fill="#ff9770" stroke="#ff9770" stroke-width="1"/><circle cx="104.2" cy="141.3" r="2.4" fill="#ff9770" stroke="#ff9770" stroke-width="1"/><circle cx="71.6" cy="145.8" r="2.4" fill="#ff9770" stroke="#ff9770" stroke-width="1"/><circle cx="397.7" cy="122.8" r="2.4" fill="#62d0ff" stroke="#62d0ff" stroke-width="1"/><circle cx="365.1" cy="143.7" r="2.4" fill="#62d0ff" stroke="#62d0ff" stroke-width="1"/><circle cx="332.5" cy="163.2" r="2.4" fill="#62d0ff" stroke="#62d0ff" stroke-width="1"/><circle cx="299.9" cy="181.9" r="2.4" fill="#62d0ff" stroke="#62d0ff" stroke-width="1"/><circle cx="267.3" cy="200.4" r="2.4" fill="#62d0ff" stroke="#62d0ff" stroke-width="1"/><circle cx="234.7" cy="218.7" r="2.4" fill="#62d0ff" stroke="#62d0ff" stroke-width="1"/><circle cx="202.1" cy="236.9" r="2.4" fill="#62d0ff" stroke="#62d0ff" stroke-width="1"/><circle cx="169.4" cy="255.1" r="2.4" fill="#62d0ff" stroke="#62d0ff" stroke-width="1"/><circle cx="136.8" cy="256.0" r="2.4" fill="#62d0ff" stroke="#62d0ff" stroke-width="1"/><circle cx="104.2" cy="256.0" r="2.4" fill="#62d0ff" stroke="#62d0ff" stroke-width="1"/><circle cx="71.6" cy="256.0" r="2.4" fill="#62d0ff" stroke="#62d0ff" stroke-width="1"/><line x1="147.9" y1="130.8" x2="245.4" y2="117.2" stroke="rgba(255,255,255,.30)" stroke-width="1.2" stroke-dasharray="6 4"/><line x1="245.7" y1="206.9" x2="343.2" y2="152.7" stroke="rgba(255,255,255,.30)" stroke-width="1.2" stroke-dasharray="6 4"/><text x="241.4" y="109.2" fill="#8b95a4" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">斜率 1</text><text x="339.2" y="144.7" fill="#8b95a4" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">斜率 4</text><text x="66.0" y="230.0" fill="#ff9770" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">欧拉 O(h)</text><text x="66.0" y="212.0" fill="#62d0ff" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">RK4 O(h⁴)</text><text x="62.0" y="302.0" fill="#5c6775" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">步长减半：欧拉误差 ≈ 1/2，RK4 误差 ≈ 1/16。</text></svg>
+<!--END:G-->
+          <div class="figcap">靶子取 <em>ẋ</em> = <em>x</em> − <em>x</em>³（它有解析解，真值可算），终点固定 <em>T</em> = 4。横轴是步长，纵轴是终点误差，双对数。白虚线是斜率 1 与 4 的参考线；左下的平台是机器精度地板。</div>
+        </div>
+        <div>
+          <div class="a kicker">§2.8 · 误差怎么报</div>
+          <h2 class="a">双对数图上，斜率就是阶数</h2>
+          <p class="a p">拿 <em>ẋ</em> = <em>x</em> − <em>x</em>³ 当靶子。它可解：<em>x(t)</em> = 1/√(1 + <em>c e</em><sup>−2<em>t</em></sup>)，<em>c</em> = 1/<em>x</em>₀² − 1。所以"真值"是现成的。</p>
+          <p class="a p">固定终点 <em>T</em> = 4，让步长从 1/2 一路减到 1/2048，量终点误差，画在双对数图上。</p>
+          <p class="a p"><strong>直线斜率就是阶数</strong>：欧拉 ≈ 1（一阶），RK4 ≈ 4（四阶）。步长缩小 10 倍，欧拉误差也缩 10 倍，RK4 缩 10000 倍。</p>
+          <p class="a p">三个实操结论：</p>
+          <p class="a p">① 试水用欧拉，出图用 RK4；<br>
+             ② 左下角变平说明撞到机器精度了，再减步长纯属浪费；<br>
+             ③ 步长不能凭感觉放大——先过稳定性这一关，再谈精度。</p>
+          <p class="a p">条件：以上"阶数"是<strong>渐近</strong>结论，要求解足够光滑、步长足够小、问题不刚性。刚性方程（快慢时间尺度差很多）需要隐式方法，那超出本章范围。</p>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§2.8 利用计算机解方程</div>
+  </section>
+
+  <!-- ========== 23 完整推导 2 · RK4 的阶 ========== -->
+  <section class="page" data-title="完整推导 · RK4 为什么是四阶">
+    <div class="page-inner">
+      <div class="a kicker">PROOF 02 · 完整推导</div>
+      <h2 class="a">RK4 的 1、2、2、1 是从哪儿来的</h2>
+      <details class="a" open style="margin-top:16px">
+        <summary><span class="tag blue">完整推导</span>线性靶子上的逐步展开 + 一般情形的结论 + 边界</summary>
+        <div class="body proofs">
+          <p><b>出发点．</b>先在最好算的靶子上把账算清：<em>ẋ</em> = <em>λx</em>，真解 <em>x(t)</em> = <em>x</em>₀<em>e<sup>λt</sup></em>。记 <em>z</em> = <em>hλ</em>。数值方法走一步都可以写成 <em>x</em><sub>n+1</sub> = <em>R(z)x<sub>n</sub></em>，<em>R</em> 叫<strong>稳定函数</strong>。用它来衡量"一步走了多远"。</p>
+          <p><b>欧拉．</b><em>R<sub>E</sub></em>(<em>z</em>) = 1 + <em>z</em>。而 <em>e<sup>z</sup></em> = 1 + <em>z</em> + <em>z</em>²/2 + …。所以一步的偏差是 <em>O</em>(<em>z</em>²) = <em>O</em>(<em>h</em>²)；走 <em>N</em> = <em>T</em>/<em>h</em> 步累积，全局误差 <em>O</em>(<em>h</em>)。<strong>一阶。</strong></p>
+          <p><span class="stepnum">1</span><b>把四个斜率算出来．</b><br>
+             <em>k</em>₁ = <em>λx</em><br>
+             <em>k</em>₂ = <em>λ</em>(<em>x</em> + <em>hk</em>₁/2) = <em>λx</em>(1 + <em>z</em>/2)<br>
+             <em>k</em>₃ = <em>λ</em>(<em>x</em> + <em>hk</em>₂/2) = <em>λx</em>(1 + <em>z</em>/2 + <em>z</em>²/4)<br>
+             <em>k</em>₄ = <em>λ</em>(<em>x</em> + <em>hk</em>₃) = <em>λx</em>(1 + <em>z</em> + <em>z</em>²/2 + <em>z</em>³/4)</p>
+          <p><span class="stepnum">2</span><b>加权求和．</b><em>k</em>₁ + 2<em>k</em>₂ + 2<em>k</em>₃ + <em>k</em>₄ = <em>λx</em>[6 + 3<em>z</em> + <em>z</em>² + <em>z</em>³/4]。除以 6 再乘 <em>h</em>，得到</p>
+          <span class="formula">R(z) = 1 + z + z²/2 + z³/6 + z⁴/24</span>
+          <p><span class="stepnum">3</span><b>对表．</b><em>e<sup>z</sup></em> 的泰勒级数是 1 + <em>z</em> + <em>z</em>²/2! + <em>z</em>³/3! + <em>z</em>⁴/4! + …。逐项比较：前五项<strong>完全一致</strong>，直到 <em>z</em>⁵/120 才分家。所以一步误差 <em>O</em>(<em>h</em>⁵)，全局误差 <em>O</em>(<em>h</em>⁴)。<strong>四阶的意思就是：它把指数函数模仿到了第 4 项。</strong></p>
+          <p><b>一般情形．</b>对非线性的 <em>f</em>，把 <em>x(t+h)</em> 按链式法则展开（<em>ẍ</em> = <em>f′f</em>，<em>x</em>⁽³⁾ = <em>f″f</em>² + <em>f′</em>²<em>f</em> …），再把 <em>k</em>₁…<em>k</em>₄ 各自展开，逐项比系数。四个斜率取在 <em>h</em>/2 处、权重取 1:2:2:1，正好让 <em>h</em>、<em>h</em>²、<em>h</em>³ 的系数全部对上——这就是那组数字的来历。</p>
+          <p><b>退化自检．</b>取 <em>λ</em> = 0（<em>f</em> ≡ 0）：<em>R</em>(0) = 1，一步之后原地不动，与真解一致 ✓。取 <em>z</em> → 0：任意阶方法都必须退化成"停在原地"，同样满足。</p>
+          <p><b>失效边界．</b>① 阶数是渐近结论：<em>h</em> 不够小时，实测斜率会偏离 4；② <em>|R(z)|</em> ≤ 1 才不发散，实轴上要求 <em>z</em> ∈ (−2.79, 0)（欧拉是 (−2, 0)）；③ 真解有奇点（§2.5 的爆破）时，任何阶都救不了表；④ 刚性问题上显式 RK4 会被稳定性而不是精度卡死。</p>
+        </div>
+      </details>
+    </div>
+    <div class="pfoot">§2.8 利用计算机解方程</div>
+  </section>
+
+  <!-- ========== 24 案例 · 过阻尼机械模拟 ========== -->
+  <section class="page" data-title="案例 · 一维流在实验室里长什么样">
+    <div class="page-inner">
+      <div class="a kicker">CASE · 原书 §2.6 的落地实验</div>
+      <h2 class="a">案例 · 一维流在实验室里长什么样</h2>
+      <p class="a p">做一个真实的、位置决定力的装置：把滑块放进黏稠液体里，接一根弹簧，或者干脆让重力沿一根弯轨道拉它。牛顿第二定律给出</p>
+      <span class="a formula">mẍ + bẋ = F(x)  ⟹  (m/b)ẍ + ẋ = F(x)/b</span>
+      <p class="a p">关键的比值是 <em>m</em>/<em>b</em>：它有一个时间的量纲，正好是"速度追得上力"的弛豫时间。把它与实验的观测时间尺度一比：</p>
+      <div class="split" style="margin-top:16px">
+        <div class="a card" style="border-color:rgba(79,191,168,.30)">
+          <h4 style="color:#a9e6d8">蜂蜜里的滑块：m/b 很小</h4>
+          <p>惯性项可以丢掉，方程退化成 <em>ẋ</em> = <em>F(x)</em>/<em>b</em>——<strong>一个标准的一维流</strong>。放手之后，滑块单调地滑向最近的谷底，一次也不越过。</p>
+        </div>
+        <div class="a card" style="border-color:rgba(232,176,75,.32)">
+          <h4 style="color:#f3d79a">水里的滑块：m/b 不小</h4>
+          <p>惯性项活着，滑块冲过谷底再荡回来。此时它是<strong>二维系统</strong>（位置 + 速度），不归本章管——见第 6 章。</p>
+        </div>
+      </div>
+      <p class="a p" style="margin-top:18px">为什么值得当真做个实验？因为这个装置能用两种方式<strong>证伪</strong>一维流的两个预言：</p>
+      <p class="a p">① <strong>没有振荡</strong>：无论从哪儿松手，轨迹都不会超调。看到超调，说明惯性项不可忽略，你的"一维"假设错了。<br>
+         ② <strong>没有来回</strong>：轨迹不会先向右再向左。看到折返，说明 <em>F</em> 显含时间（手在动）或者有第二个自由度。</p>
+      <p class="a p">同一个道理也出现在工程里：指针式仪表（电流计）的<strong>过阻尼</strong>档就是这么设计的——宁可慢慢爬，也不要来回摆。它的设计方程正是 <em>ẋ</em> = <em>F</em>(<em>x</em>)/<em>b</em>，而临界阻尼附近的行为要用二阶理论算，那是第 5、6 章的事。</p>
+    </div>
+    <div class="pfoot">§2.6 振动的不可能性</div>
+  </section>
+
+  <!-- ========== 25 自测 ========== -->
+  <section class="page" data-title="自测 · 五道题">
+    <div class="page-inner">
+      <div class="a kicker">CHECK · 自测</div>
+      <h2 class="a" style="margin-bottom:14px">五道题：能算的都要算</h2>
+      <div class="qs" id="quizbox"></div>
+      <div class="score" id="score"></div>
+      <label class="a done" id="donebox">
+        <input type="checkbox" id="doneChk">
+        <span>这一章读完了</span>
+      </label>
+    </div>
+    <div class="pfoot">—</div>
+  </section>
+
+  <!-- ========== 26 带走 ========== -->
+  <section class="page" data-title="带走三句话">
+    <div class="page-inner">
+      <div class="a kicker">TAKEAWAY · 带走</div>
+      <h2 class="a">三条结论、两把错尺、一个工具</h2>
+      <div class="split" style="margin-top:18px">
+        <div>
+          <p class="a p"><strong>结论一：</strong><em>f</em> 的零点就是全部可能的终点；零点之间只有一种流向，所以一维流的命运是<strong>单调</strong>的——去某个点，或者跑向无穷。</p>
+          <p class="a p"><strong>结论二：</strong>稳定与否看 <em>λ</em> = <em>f′(x*)</em> 的符号；<em>λ</em> = 0 时判据失效，必须回到符号法或高阶项。<strong>这不是判据不严谨，是一阶信息不够。</strong></p>
+          <p class="a p"><strong>结论三：</strong>势 <em>V</em> = −∫<em>f</em> 让"往下走"这件事变成地形问题；<em>V</em> 单调下降，因此<strong>一维自治流不可能有非平凡周期解</strong>。</p>
+          <div class="a pull">上一页留下的"但是"，就是下一章的开头：<br><em>f</em> 里带一个参数 <em>μ</em>，零点会怎么生、怎么灭？<cite>→ 第 3 章 · 分岔</cite></div>
+        </div>
+        <div>
+          <div class="a card" style="border-color:rgba(217,83,74,.32)">
+            <h4 style="color:#ffb4a6">两把会骗人的尺子</h4>
+            <p><strong>唯一性会失手：</strong><em>ẋ</em> = √<em>x</em> 在 <em>x</em> = 0 处李普希茨失效，一个初值三条未来。<br>
+               <strong>解会活不到未来：</strong><em>ẋ</em> = 1 + <em>x</em>² 在 <em>t</em> = π/2 之前爆破。判据是 ∫<em>dx</em>/<em>f</em> 是否收敛。</p>
+          </div>
+          <div class="a card" style="margin-top:14px;border-color:rgba(98,208,255,.28)">
+            <h4 style="color:#bfe6ff">一个工具</h4>
+            <p>RK4 是四阶：步长减半，误差降到约 1/16。它把 <em>e</em><sup><em>λh</em></sup> 模仿到第 4 项。但它有稳定性门槛（<em>λh</em> &gt; −2.79），且不保证模型本身还有意义。</p>
+          </div>
+          <div class="a chips" style="margin-top:18px"><span>§2.1 几何</span><span>§2.2 稳定</span><span>§2.3 逻辑斯谛</span><span>§2.4 λ 判据</span><span>§2.5 唯一性</span><span>§2.6 无振荡</span><span>§2.7 势</span><span>§2.8 数值解</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">—</div>
+  </section>
+
+  <!-- ========== end of pages ========== -->
+
+</main>
+
+<script>
+(function(){
+"use strict";
+var $=function(s,r){return (r||document).querySelector(s);};
+var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s));};
+var REDUCE=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+var C={text:"#8b95a4",gold:"#e8b04b",cyan:"#62d0ff",warm:"#ff9770",teal:"#4fbfa8",grid:"rgba(255,255,255,.06)"};
+
+/* ================= 翻页 ================= */
+var pages=$$(".page"), dotsBox=$("#dots"), rail=$("#rail"),
+    counter=$("#counter"), whereEl=$("#where"), tip=$("#tip");
+var idx=0, steps=[], lock=false;
+
+pages.forEach(function(p,i){
+  steps[i]=0;
+  var b=document.createElement("button");
+  b.setAttribute("aria-label","第 "+(i+1)+" 页");
+  b.innerHTML='<i></i>';
+  b.addEventListener("click",function(){ go(i); });
+  dotsBox.appendChild(b);
+});
+var dotEls=$$("#dots button");
+
+function setStep(pi,s){
+  steps[pi]=s;
+  var page=pages[pi];
+  $$(".step",page).forEach(function(el,k){ el.classList.toggle("on",k===s); });
+  $$(".sdots i",page).forEach(function(el,k){ el.classList.toggle("on",k===s); });
+  var hook=page.getAttribute("data-hook");
+  if(hook==="flow"&&window.NDC1) window.NDC1.pick(s);
+  if(hook==="pend"&&window.NDC2) window.NDC2.setGamma([0,0.22,0.75][s]);
+  if(hook==="lorenz"&&window.NDC4) window.NDC4.setDelta([1e-2,1e-5,1e-9][s]);
+}
+function paint(){
+  for(var i=0;i<pages.length;i++) pages[i].classList.toggle("on",i===idx);
+  for(var k=0;k<dotEls.length;k++) dotEls[k].classList.toggle("on",k===idx);
+  rail.style.width=(((idx+1)/pages.length)*100).toFixed(2)+"%";
+  counter.innerHTML="<b>"+String(idx+1).padStart(2,"0")+"</b> / "+pages.length;
+  whereEl.innerHTML="<b>"+(pages[idx].getAttribute("data-title")||"")+"</b>";
+}
+function go(i){
+  if(i<0||i>=pages.length) return;
+  idx=i;
+  var inner=$(".page-inner",pages[idx]);
+  if(inner) inner.scrollTop=0;
+  if(window.__FITS) window.__FITS.forEach(function(fn){ try{ fn(); }catch(e){} });
+  paint();
+  setStep(idx,0);
+  if(idx>0) tip.classList.add("hide");
+}
+function next(){
+  var p=pages[idx], n=parseInt(p.getAttribute("data-steps")||"0",10), s=steps[idx]||0;
+  if(n>0&&s<n-1){ setStep(idx,s+1); return; }
+  if(idx<pages.length-1) go(idx+1);
+}
+function prev(){
+  var p=pages[idx], n=parseInt(p.getAttribute("data-steps")||"0",10), s=steps[idx]||0;
+  if(n>0&&s>0){ setStep(idx,s-1); return; }
+  if(idx>0) go(idx-1);
+}
+function innerEdge(dir){
+  var inner=pages[idx]&&$(".page-inner",pages[idx]);
+  if(!inner||inner.scrollHeight<=inner.clientHeight+4) return true;
+  if(dir>0) return inner.scrollTop+inner.clientHeight>=inner.scrollHeight-6;
+  return inner.scrollTop<=3;
+}
+paint(); setStep(0,0);
+
+window.addEventListener("wheel",function(e){
+  if(lock) return;
+  if(Math.abs(e.deltaY)<8) return;
+  var dir=e.deltaY>0?1:-1;
+  if(!innerEdge(dir)) return;
+  lock=true;
+  if(dir>0) next(); else prev();
+  window.setTimeout(function(){ lock=false; }, 620);
+},{passive:true});
+
+window.addEventListener("keydown",function(e){
+  var k=e.key;
+  if(k==="ArrowDown"||k==="ArrowRight"||k===" "||k==="PageDown"||k==="Enter"){ e.preventDefault(); next(); }
+  else if(k==="ArrowUp"||k==="ArrowLeft"||k==="PageUp"){ e.preventDefault(); prev(); }
+  else if(k==="Home"){ e.preventDefault(); go(0); }
+  else if(k==="End"){ e.preventDefault(); go(pages.length-1); }
+});
+
+var ty=null;
+window.addEventListener("touchstart",function(e){ ty=e.touches[0].clientY; },{passive:true});
+window.addEventListener("touchend",function(e){
+  if(ty===null) return;
+  var dy=ty-e.changedTouches[0].clientY;
+  if(Math.abs(dy)>46){ dy>0?next():prev(); }
+  ty=null;
+},{passive:true});
+
+/* ================= 画布工具 ================= */
+function makeCanvas(cv){
+  var ctx=cv.getContext("2d");
+  var dpr=Math.min(window.devicePixelRatio||1,2);
+  var h0=parseInt(cv.getAttribute("height"),10)||330;
+  var w=cv.clientWidth||600, h=h0;
+  function fit(){
+    w=cv.clientWidth||600;
+    cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
+    cv.style.height=h+"px";
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  fit(); window.addEventListener("resize",fit);
+  window.__FITS=window.__FITS||[]; window.__FITS.push(fit);
+  return {ctx:ctx,fit:fit,w:function(){return w;},h:function(){return h;}};
+}
+function loop(cv,fn){
+  function tick(){
+    try{
+      var pg=cv.closest(".page");
+      if(!pg||pg.classList.contains("on")) fn();
+    }catch(e){ /* 单帧出错不中断动画循环 */ }
+    window.requestAnimationFrame(tick);
+  }
+  window.requestAnimationFrame(tick);
+}
+function tip(ctx,txt,x,y,color,size,align){
+  ctx.fillStyle=color||C.text;
+  ctx.font=(size||11)+'px "PingFang SC","Microsoft YaHei",sans-serif';
+  ctx.textAlign=align||"left";
+  ctx.fillText(txt,x,y);
+}
+
+
+/* ================= 演示 01 · 一维流实验室 ================= */
+(function(){
+  var cv=$("#cv1"); if(!cv) return;
+  var U=makeCanvas(cv), ctx=U.ctx;
+  var SYS=[
+    {n:"ẋ = x(1 − x)", f:function(v){ return v*(1-v); }, x0:0.30, tag:"逻辑斯谛"},
+    {n:"ẋ = x²", f:function(v){ return v*v; }, x0:-1.20, tag:"半稳定"},
+    {n:"ẋ = 1 + x²", f:function(v){ return 1+v*v; }, x0:0.00, tag:"没有零点"}
+  ];
+  var si=0, x=0.30, tt=0, hst=[], status="流动中", XR0=-1.85, XR1=2.35;
+  function F(v){ return SYS[si].f(v); }
+  function setP(v){ var sl=$("#p1"), sv=$("#p1v"); if(sl) sl.value=v; if(sv) sv.textContent=(+v).toFixed(2); }
+  function restart(v){
+    if(v!==undefined) x=v;
+    tt=0; hst=[]; status="流动中"; setP(x);
+  }
+  function dF(v){ return (F(v+1e-4)-F(v-1e-4))/2e-4; }
+  function frange(){
+    var lo=1e9, hi=-1e9, i, q;
+    for(i=0;i<=140;i++){ q=F(XR0+(XR1-XR0)*i/140); if(q<lo) lo=q; if(q>hi) hi=q; }
+    var pad=(hi-lo)*0.11+1e-6;
+    return [lo-pad, hi+pad];
+  }
+  function rootsOf(){
+    var out=[], i, a, b, fa, fb, k, m, fm;
+    for(i=0;i<=420;i++){
+      a=XR0+(XR1-XR0)*i/420; b=XR0+(XR1-XR0)*(i+1)/420;
+      fa=F(a); fb=F(b);
+      if(fa*fa<1e-14){ out.push(a); continue; }
+      if(fa*fb<0){
+        for(k=0;k<64;k++){
+          m=(a+b)/2; fm=F(m);
+          if(fa*fm<=0){ b=m; fb=fm; } else { a=m; fa=fm; }
+        }
+        out.push((a+b)/2);
+      }
+    }
+    return out;
+  }
+  function rk(){
+    var dt=0.024, k1=F(x), k2=F(x+dt/2*k1), k3=F(x+dt/2*k2), k4=F(x+dt*k3);
+    x=x+dt/6*(k1+2*k2+2*k3+k4); tt+=dt;
+    if(x<XR0-0.02||x>XR1+0.02){ status="已跑出画面"; }
+    else if(Math.abs(F(x))<2e-4){ status="已停住"; }
+    else { status="流动中"; }
+    if(x<-900||x>900){ restart(SYS[si].x0); }
+    if(hst.length>90) hst.shift();
+    hst.push(x);
+  }
+  function draw(){
+    var w=U.w(), h=U.h(), i, v, p0, g;
+    ctx.clearRect(0,0,w,h);
+    var padL=36, padR=14, top=18, fBot=Math.round(h*0.55), NY=Math.round(h*0.80);
+    var X=function(q){ return padL+(q-XR0)/(XR1-XR0)*(w-padL-padR); };
+    var fr=frange();
+    var Y=function(q){ return fBot-(q-fr[0])/(fr[1]-fr[0])*(fBot-top); };
+    for(g=-1;g<=2;g++){
+      ctx.strokeStyle=C.grid; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(X(g),top); ctx.lineTo(X(g),NY+34); ctx.stroke();
+    }
+    ctx.strokeStyle="rgba(255,255,255,.20)"; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(padL,Y(0)); ctx.lineTo(w-padR,Y(0)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(X(0),top); ctx.lineTo(X(0),NY+34); ctx.stroke();
+    ctx.beginPath();
+    for(i=0;i<=240;i++){ v=XR0+(XR1-XR0)*i/240; if(i) ctx.lineTo(X(v),Y(F(v))); else ctx.moveTo(X(v),Y(F(v))); }
+    ctx.strokeStyle=C.gold; ctx.lineWidth=2; ctx.lineJoin="round"; ctx.stroke();
+    tip(ctx,SYS[si].n,padL+2,top+2,C.gold,11.5);
+    tip(ctx,"f(x)",X(0)+7,top+2,C.text,10.5);
+    tip(ctx,"x",w-padR-8,Y(0)-7,C.text,10.5,"right");
+    var rs=rootsOf();
+    for(i=0;i<rs.length;i++){
+      var r=rs[i], sl=dF(r), half=(Math.abs(sl)<2e-3);
+      ctx.beginPath(); ctx.arc(X(r),NY,5.2,0,Math.PI*2);
+      ctx.fillStyle=(sl<-2e-3)?C.warm:"#080b10";
+      ctx.strokeStyle=half?C.gold:C.warm; ctx.lineWidth=1.6;
+      ctx.fill(); ctx.stroke();
+      tip(ctx,half?"半稳定":(sl<0?"稳定":"不稳定"),X(r),NY+25,half?C.gold:(sl<0?"#ffb59c":"#5c6775"),10,"center");
+    }
+    ctx.strokeStyle="rgba(139,149,164,.50)"; ctx.lineWidth=1.2;
+    ctx.beginPath(); ctx.moveTo(padL,NY); ctx.lineTo(w-padR,NY); ctx.stroke();
+    for(i=0;i<=26;i++){
+      v=XR0+(XR1-XR0)*i/26;
+      var fv=F(v);
+      if(Math.abs(fv)<(fr[1]-fr[0])*0.055) continue;
+      p0=X(v);
+      var d=(fv>0)?1:-1, ln=Math.min(19,6+Math.abs(fv)*6);
+      ctx.beginPath(); ctx.moveTo(p0,NY); ctx.lineTo(p0+d*ln,NY); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(p0+d*ln,NY);
+      ctx.lineTo(p0+d*(ln-4.2),NY-3); ctx.lineTo(p0+d*(ln-4.2),NY+3);
+      ctx.closePath(); ctx.fillStyle="rgba(139,149,164,.5)"; ctx.fill();
+    }
+    for(i=0;i<hst.length;i++){
+      var q=hst[i]; if(q<XR0||q>XR1) continue;
+      ctx.beginPath(); ctx.arc(X(q),NY,1.6,0,Math.PI*2);
+      ctx.fillStyle="rgba(98,208,255,"+(0.06+0.34*i/hst.length).toFixed(3)+")"; ctx.fill();
+    }
+    var cx=Math.max(XR0,Math.min(XR1,x));
+    ctx.strokeStyle="rgba(98,208,255,.28)"; ctx.setLineDash([3,4]); ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(X(cx),NY); ctx.lineTo(X(cx),Y(F(cx))); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(X(cx),NY,5.4,0,Math.PI*2);
+    ctx.fillStyle=C.cyan; ctx.fill();
+    ctx.beginPath(); ctx.arc(X(cx),Y(F(cx)),3.2,0,Math.PI*2);
+    ctx.fillStyle="rgba(98,208,255,.55)"; ctx.fill();
+    var ro=$("#ro1");
+    if(ro) ro.innerHTML="x = <b>"+x.toFixed(3)+"</b>　ẋ = <b>"+F(x).toFixed(3)+"</b>　t = <b>"+tt.toFixed(1)+"</b>　"+status;
+  }
+  restart(SYS[0].x0);
+  loop(cv,function(){ rk(); rk(); draw(); });
+  var sl=$("#p1");
+  if(sl) sl.addEventListener("input",function(){ restart(parseFloat(sl.value)); });
+  var rb=$("#reset1");
+  if(rb) rb.addEventListener("click",function(){ restart(SYS[si].x0); });
+  cv.addEventListener("pointerdown",function(e){
+    cv.setPointerCapture(e.pointerId);
+    var w=U.w(), padL=36, padR=14;
+    var v=(e.offsetX-padL)/(w-padL-padR)*(XR1-XR0)+XR0;
+    if(v<XR0) v=XR0; if(v>XR1) v=XR1;
+    restart(v);
+  });
+  window.NDC1={pick:function(i){
+    si=(i>=0&&i<3)?i:0;
+    restart(SYS[si].x0);
+  }};
+})();
+
+
+/* ================= 小测 ================= */
+(function(){
+  var box=$("#quizbox"); if(!box) return;
+  var QS=[
+    {q:"ẋ = x² − 1 有两个不动点，哪一个稳定？",
+     o:["x = −1","x = 1","两个都稳定","两个都不稳定"],a:0,
+     w:"f′=2x：在 x=−1 处 f′=−2<0，谷底；在 x=1 处 f′=2>0，山顶。判据只看该点斜率的符号。"},
+    {q:"逻辑斯谛加固定收割 ẋ = x(1−x) − 0.3，长期会怎样？",
+     o:["稳定在某个正值","稳定在 0","没有不动点，种群必然崩溃","在两个值之间振荡"],a:2,
+     w:"判别式 1−4h = 1−1.2 < 0，二次方程无实根，ẋ 处处为负。h 超过 1/4（系统最大再生速率）就必然崩。"},
+    {q:"ẋ = √x，x(0) = 0，为什么不止一条解？",
+     o:["f 不连续","f 在 0 处不满足李普希茨条件","初值必须为正才有解","方程其实无解"],a:1,
+     w:"f′=1/(2√x) 在 0 处发散，L 取不到。于是 x≡0 与 x=t²/4 都是解。只要 x₀>0，解即唯一。"},
+    {q:"一维自治流不可能有非平凡的周期解，关键理由是哪一条？",
+     o:["总能量守恒","极值点必是不动点，而零点之间严格单调，无法折返","一维的不动点一定稳定","时间不能倒流"],a:1,
+     w:"周期解的极大/极小点处 ẋ=0，即 f=0；两个零点之间一段单调，回不到起点。要振荡必须另有维度，或者 f 显含 t（如 ẋ=cos t）。"},
+    {q:"RK4 的步长从 1/100 减到 1/200，终点误差大致会怎样？",
+     o:["减半","降到约 1/4","降到约 1/16","几乎不变"],a:2,
+     w:"四阶意味着全局误差 ∝ h⁴，2⁴ = 16。欧拉是一阶，同样操作只减半。前提是 h 已经落在渐近区里。"}
+  ];
+  var KEY="ndc2-quiz", DKEY="ndc2-done";
+  var saved={}, score=0, answered=0;
+  try{ saved=JSON.parse(localStorage.getItem(KEY)||"{}"); }catch(e){ saved={}; }
+
+  QS.forEach(function(item,qi){
+    var w=document.createElement("div"); w.className="q";
+    var stem=document.createElement("div"); stem.className="stem"; stem.textContent="Q"+(qi+1)+"　"+item.q;
+    var opts=document.createElement("div");
+    var fb=document.createElement("div"); fb.className="fb";
+    w.appendChild(stem); w.appendChild(opts); w.appendChild(fb);
+    item.o.forEach(function(txt,oi){
+      var d=document.createElement("div"); d.className="opt";
+      var k=document.createElement("span"); k.className="k"; k.textContent=String.fromCharCode(65+oi);
+      var s=document.createElement("span"); s.textContent=txt;
+      d.appendChild(k); d.appendChild(s);
+      d.addEventListener("click",function(){
+        if(opts.getAttribute("data-locked")==="1") return;
+        opts.setAttribute("data-locked","1");
+        var ok=oi===item.a;
+        Array.prototype.forEach.call(opts.children,function(c,ci){
+          c.classList.add("locked");
+          if(ci===item.a) c.classList.add("right");
+        });
+        if(!ok) d.classList.add("wrong");
+        fb.textContent=(ok?"答对了。":"再看一眼。")+item.w;
+        fb.className="fb show"+(ok?"":" bad");
+        answered++; if(ok) score++;
+        saved[qi]=oi;
+        try{ localStorage.setItem(KEY,JSON.stringify(saved)); }catch(e){}
+        paintScore();
+      });
+      opts.appendChild(d);
+    });
+    if(saved[qi]!==undefined){
+      var oi2=saved[qi];
+      opts.setAttribute("data-locked","1");
+      Array.prototype.forEach.call(opts.children,function(c,ci){
+        c.classList.add("locked");
+        if(ci===item.a) c.classList.add("right");
+      });
+      if(oi2!==item.a) opts.children[oi2].classList.add("wrong");
+      fb.textContent=(oi2===item.a?"答对了。":"再看一眼。")+item.w;
+      fb.className="fb show"+(oi2===item.a?"":" bad");
+    }
+    box.appendChild(w);
+  });
+  function paintScore(){
+    var el=$("#score"); if(!el) return;
+    if(!answered){ el.innerHTML="共 5 题 · 点选项立刻判对错"; return; }
+    el.innerHTML="已作答 <b>"+answered+"</b> / 5　答对 <b>"+score+"</b> 题　"+
+      (score===5?"全对，可以进第 3 章。":score>=3?"基本到位，错的那几道回看解析。":"建议回去把演示再做一遍。");
+  }
+  paintScore();
+  var chk=$("#doneChk"), boxD=$("#donebox");
+  try{ chk.checked=localStorage.getItem(DKEY)==="1"; }catch(e){}
+  if(chk) chk.addEventListener("change",function(){
+    try{ localStorage.setItem(DKEY,chk.checked?"1":"0"); }catch(e){}
+    if(boxD) boxD.style.background=chk.checked?"rgba(79,191,168,.16)":"";
+  });
+})();
+
+/* 四个演示都就绪后，把当前页（含步骤）对齐一次，保证首屏与第 1 步一致 */
+setStep(idx,steps[idx]||0);
+})();
+</script>
+
+</body>
+</html>

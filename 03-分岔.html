@@ -1,0 +1,1150 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>第 3 章 · 分岔（Bifurcations）—— 非线性动力学与混沌</title>
+<style>
+/* ================= 0. 基础 ================= */
+:root{
+  --bg:#080b10; --bg2:#0e141d; --panel:#101822; --panel2:#0b1119;
+  --ink:#eee8dc; --ink2:#c3cad6; --mut:#8b95a4; --dim:#5c6775;
+  --gold:#e8b04b; --cyan:#62d0ff; --warm:#ff9770; --teal:#4fbfa8; --red:#d9534a;
+  --line:rgba(255,255,255,.10); --line2:rgba(255,255,255,.06);
+  --serif:"Source Han Serif SC","Noto Serif SC","Songti SC",SimSun,"STSong",serif;
+  --sans:"PingFang SC","HarmonyOS Sans SC","Microsoft YaHei","Hiragino Sans GB",system-ui,sans-serif;
+  --mono:"JetBrains Mono","Cascadia Code",Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--sans);
+  font-size:16px; line-height:1.85; overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4{font-family:var(--serif);font-weight:700;line-height:1.28;letter-spacing:.01em}
+em{font-style:normal;color:var(--gold)}
+::selection{background:rgba(232,176,75,.28)}
+
+/* ================= 1. 背景（全篇同一底色，只有缓慢呼吸的光） ================= */
+.bg{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.bg .orb{position:absolute;border-radius:50%;filter:blur(90px);opacity:.30;mix-blend-mode:screen}
+.bg .o1{width:52vw;height:52vw;left:-12vw;top:-14vw;
+  background:radial-gradient(circle,rgba(43,76,126,.9),transparent 66%);
+  animation:drift1 34s ease-in-out infinite alternate}
+.bg .o2{width:44vw;height:44vw;right:-10vw;bottom:-14vw;
+  background:radial-gradient(circle,rgba(150,62,44,.75),transparent 66%);
+  animation:drift2 42s ease-in-out infinite alternate}
+.bg .o3{width:30vw;height:30vw;left:44vw;top:38vh;opacity:.13;
+  background:radial-gradient(circle,rgba(232,176,75,.8),transparent 68%);
+  animation:drift1 28s ease-in-out infinite alternate-reverse}
+@keyframes drift1{from{transform:translate3d(0,0,0) scale(1)}to{transform:translate3d(4vw,3vh,0) scale(1.12)}}
+@keyframes drift2{from{transform:translate3d(0,0,0) scale(1.06)}to{transform:translate3d(-3vw,-4vh,0) scale(.96)}}
+.bg .mesh{position:absolute;inset:-10%;
+  background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);
+  background-size:72px 72px;
+  -webkit-mask-image:radial-gradient(62% 58% at 50% 45%,#000 20%,transparent 80%);
+  mask-image:radial-gradient(62% 58% at 50% 45%,#000 20%,transparent 80%);
+  animation:meshmove 60s linear infinite}
+@keyframes meshmove{to{transform:translate3d(-72px,-72px,0)}}
+
+/* ================= 2. 幻灯片容器 ================= */
+.deck{position:fixed;inset:0;z-index:2}
+.page{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  padding:clamp(24px,5vh,64px) clamp(20px,4vw,56px);
+  opacity:0;visibility:hidden;pointer-events:none;
+  transform:scale(1.015);filter:blur(7px);
+  transition:opacity .62s cubic-bezier(.4,0,.2,1),transform .72s cubic-bezier(.4,0,.2,1),
+             filter .62s cubic-bezier(.4,0,.2,1),visibility .62s;
+}
+.page.on{opacity:1;visibility:visible;transform:none;filter:none;pointer-events:auto;z-index:3}
+.page-inner{width:min(1140px,100%);max-height:100%;overflow:auto;overscroll-behavior:contain;
+  scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent}
+.page-inner::-webkit-scrollbar{width:6px}
+.page-inner::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:6px}
+
+/* 入场：逐级浮现（不是从下往上滑，而是轻微上浮+淡入） */
+.a{opacity:0;transform:translateY(16px);
+  transition:opacity .68s cubic-bezier(.2,.8,.3,1),transform .68s cubic-bezier(.2,.8,.3,1)}
+.page.on .a{opacity:1;transform:none}
+.page.on .a:nth-child(1){transition-delay:.05s}
+.page.on .a:nth-child(2){transition-delay:.11s}
+.page.on .a:nth-child(3){transition-delay:.17s}
+.page.on .a:nth-child(4){transition-delay:.23s}
+.page.on .a:nth-child(5){transition-delay:.29s}
+.page.on .a:nth-child(6){transition-delay:.35s}
+.page.on .a:nth-child(7){transition-delay:.41s}
+.page.on .a:nth-child(8){transition-delay:.47s}
+
+/* ================= 3. HUD ================= */
+.rail{position:fixed;top:0;left:0;height:2px;z-index:60;background:linear-gradient(90deg,var(--gold),var(--warm));
+  box-shadow:0 0 14px rgba(232,176,75,.55);transition:width .55s cubic-bezier(.4,0,.2,1)}
+.dots{position:fixed;right:clamp(12px,2vw,26px);top:50%;transform:translateY(-50%);z-index:60;
+  display:flex;flex-direction:column;gap:7px;align-items:flex-end}
+.dots button{appearance:none;border:0;background:transparent;padding:3px;cursor:pointer;display:flex;align-items:center;gap:8px}
+.dots i{display:block;width:14px;height:2px;background:rgba(255,255,255,.20);transition:.3s;border-radius:2px}
+.dots button:hover i{background:rgba(255,255,255,.45);width:20px}
+.dots button.on i{background:var(--gold);width:26px}
+.counter{position:fixed;right:clamp(12px,2vw,26px);bottom:18px;z-index:60;
+  font:600 11.5px/1 var(--mono);letter-spacing:.18em;color:var(--dim)}
+.counter b{color:var(--gold)}
+.where{position:fixed;left:clamp(14px,2.4vw,30px);bottom:18px;z-index:60;
+  font:500 11.5px/1.6 var(--sans);letter-spacing:.14em;color:var(--dim);
+  max-width:44vw;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.where b{color:var(--mut);font-weight:500}
+.tip{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:60;
+  font:500 11.5px/1 var(--sans);letter-spacing:.2em;color:var(--dim);
+  display:flex;align-items:center;gap:9px;transition:opacity .5s}
+.tip i{width:5px;height:5px;border-radius:50%;background:var(--gold);animation:blip 1.7s infinite}
+@keyframes blip{0%,100%{opacity:.25}50%{opacity:1}}
+.tip.hide{opacity:0;pointer-events:none}
+
+/* ================= 4. 版式组件 ================= */
+.kicker{font:600 10.5px/1 var(--sans);letter-spacing:.3em;color:var(--gold);
+  display:flex;align-items:center;gap:12px;margin-bottom:20px;text-transform:uppercase}
+.kicker::before{content:"";width:34px;height:1px;background:linear-gradient(90deg,var(--gold),transparent)}
+h2{font-size:clamp(24px,3.4vw,40px);color:#f4eee2;margin-bottom:18px;text-wrap:balance}
+.p{font-size:clamp(14.6px,1.15vw,16.4px);line-height:1.95;color:var(--ink2);margin-bottom:.95em}
+.p strong{color:#f6f1e5;font-weight:600;background:linear-gradient(transparent 64%,rgba(232,176,75,.30) 0);padding:0 1px}
+.p b{color:#f6f1e5}
+.pull{border-left:2px solid var(--gold);padding-left:18px;margin:22px 0;
+  font-family:var(--serif);font-size:clamp(15px,1.5vw,19px);line-height:1.8;color:#efe6d2}
+.pull cite{display:block;font-family:var(--sans);font-size:11.5px;color:var(--dim);font-style:normal;margin-top:8px;letter-spacing:.08em}
+.split{display:grid;grid-template-columns:1.06fr .94fr;gap:clamp(22px,4vw,60px);align-items:center}
+.split.rev{grid-template-columns:.94fr 1.06fr}
+.center{text-align:center}
+.fig{background:rgba(255,255,255,.028);border:1px solid var(--line2);border-radius:18px;padding:16px}
+.fig svg{display:block;width:100%;height:auto}
+.figcap{margin-top:10px;font-size:12px;line-height:1.7;color:var(--dim)}
+.card{background:rgba(255,255,255,.032);border:1px solid var(--line2);border-radius:16px;padding:20px 22px}
+.card h4{font-size:15.5px;color:#f2ecdf;margin-bottom:9px}
+.card p{font-size:13.6px;line-height:1.85;color:var(--mut)}
+.chips{display:flex;flex-wrap:wrap;gap:9px;margin-top:22px}
+.chips span{font-size:11.5px;letter-spacing:.08em;color:var(--mut);
+  border:1px solid var(--line);padding:6px 12px;border-radius:999px}
+
+/* 演示台 */
+.demo{background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.015));
+  border:1px solid var(--line);border-radius:18px;padding:14px;position:relative}
+.demo::before{content:"可玩";position:absolute;top:-9px;left:18px;font:600 9.5px/1 var(--sans);
+  letter-spacing:.24em;color:#0a0d12;background:var(--gold);padding:4px 8px;border-radius:4px}
+.demo canvas{display:block;width:100%;border-radius:12px;background:#05070b;touch-action:none;cursor:crosshair}
+.ctrls{display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin-top:12px}
+.chip{appearance:none;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.03);
+  color:#c3cbd8;font:500 11.5px/1 var(--mono);padding:7px 11px;border-radius:999px;cursor:pointer;transition:.18s}
+.chip:hover{background:rgba(255,255,255,.09);color:#fff}
+.chip.on{background:var(--gold);color:#0a0d12;border-color:var(--gold);font-weight:700}
+.btn{appearance:none;border:1px solid rgba(255,255,255,.18);background:transparent;color:#dfe6ef;
+  font:500 11.5px/1 var(--sans);padding:8px 13px;border-radius:8px;cursor:pointer;letter-spacing:.05em}
+.btn:hover{background:rgba(255,255,255,.08)}
+.slider{display:flex;align-items:center;gap:9px;font:500 11.5px/1 var(--mono);color:var(--mut)}
+.slider input[type=range]{appearance:none;width:clamp(100px,16vw,170px);height:3px;border-radius:3px;
+  background:rgba(255,255,255,.18);outline:none}
+.slider input[type=range]::-webkit-slider-thumb{appearance:none;width:12px;height:12px;border-radius:50%;
+  background:var(--gold);cursor:pointer;box-shadow:0 0 0 3px rgba(232,176,75,.2)}
+.slider b{color:var(--gold);font-weight:600;min-width:3.2em;display:inline-block}
+.readout{font:500 11.5px/1.7 var(--mono);color:var(--dim);margin-top:9px}
+.readout b{color:var(--teal);font-weight:600}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:9px;font:500 11px/1 var(--sans);color:var(--dim)}
+.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+
+/* 步骤文字（演示页右侧） */
+.steps{position:relative;min-height:clamp(240px,40vh,330px)}
+.step{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;
+  opacity:0;transform:translateY(14px);transition:opacity .5s,transform .5s;pointer-events:none}
+.step.on{opacity:1;transform:none;pointer-events:auto}
+.snum{font:700 10px/1 var(--mono);letter-spacing:.24em;color:var(--gold);margin-bottom:13px}
+.step h3{font-family:var(--serif);font-size:clamp(16px,1.85vw,22px);color:#f3eddf;margin-bottom:10px;line-height:1.5}
+.step p{font-size:13.8px;line-height:1.9;color:var(--mut)}
+.step p strong{color:#f0e7d5;font-weight:600}
+.sdots{display:flex;gap:6px;margin-top:18px}
+.sdots i{width:15px;height:2px;background:rgba(255,255,255,.16);transition:.3s}
+.sdots i.on{background:var(--gold);width:24px}
+
+/* 折叠 */
+details{border-radius:14px;overflow:hidden;border:1px solid var(--line2);background:rgba(255,255,255,.025)}
+details>summary{cursor:pointer;list-style:none;padding:13px 18px;font:600 13px/1.6 var(--sans);color:#e6dfd0;
+  display:flex;align-items:center;gap:10px}
+details>summary::-webkit-details-marker{display:none}
+details>summary::after{content:"+";margin-left:auto;color:var(--gold);font-weight:400;font-size:16px;transition:.3s}
+details[open]>summary::after{transform:rotate(45deg)}
+details .body{padding:0 20px 18px;font-size:13.6px;line-height:1.95;color:var(--mut)}
+details .body p{margin-bottom:.7em}
+details .body b{color:#f0e7d5}
+.tag{font:700 9.5px/1 var(--mono);letter-spacing:.14em;background:rgba(232,176,75,.16);
+  color:var(--gold);padding:4px 7px;border-radius:4px}
+.tag.blue{background:rgba(98,208,255,.14);color:var(--cyan)}
+.formula{display:block;text-align:center;font-family:var(--serif);font-size:16px;color:#f0e7d5;
+  padding:11px 8px;margin:11px 0;background:rgba(255,255,255,.04);border-radius:9px;letter-spacing:.01em}
+code{font:500 12.5px/1.4 var(--mono);background:rgba(255,255,255,.07);padding:2px 6px;border-radius:4px;color:#e7dfd0}
+
+/* 推导页 */
+.proofs{font-size:12.6px;line-height:1.9}
+.proofs .formula{font-size:14.5px;margin:9px 0;padding:9px 6px}
+@media(min-width:1180px){
+  .proofs{columns:2;column-gap:34px;column-rule:1px solid rgba(255,255,255,.07)}
+  .proofs>p,.proofs>.formula{break-inside:avoid}
+}
+.stepnum{color:var(--cyan);font-weight:700;font-family:var(--mono);font-size:12px;margin-right:6px}
+
+/* 章卡 */
+.map{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-top:20px}
+.mcard{background:rgba(255,255,255,.03);border:1px solid var(--line2);border-radius:12px;padding:12px 13px;
+  cursor:pointer;transition:.22s}
+.mcard:hover{background:rgba(255,255,255,.06);border-color:rgba(232,176,75,.45);transform:translateY(-2px)}
+.mcard .n{font:700 9.5px/1 var(--mono);color:var(--gold);letter-spacing:.14em}
+.mcard h5{font-family:var(--serif);font-size:14px;margin:7px 0 0;color:#f0eade;font-weight:700}
+.mcard .one{font-size:11.5px;color:var(--dim);line-height:1.6;margin-top:5px}
+.mcard.here{border-color:rgba(232,176,75,.6);background:rgba(232,176,75,.10)}
+
+/* 小测 */
+.qs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.q{background:rgba(255,255,255,.028);border:1px solid var(--line2);border-radius:13px;padding:14px 16px}
+.q .stem{font-size:13px;line-height:1.7;color:#ece5d7;margin-bottom:9px;font-weight:500}
+.opt{display:flex;gap:8px;align-items:flex-start;padding:7px 10px;border:1px solid var(--line2);
+  border-radius:8px;cursor:pointer;font-size:12.3px;line-height:1.6;color:#b9c2cf;margin-bottom:6px;transition:.16s}
+.opt:hover{background:rgba(255,255,255,.05)}
+.opt .k{font:700 10.5px/1.5 var(--mono);color:var(--dim);flex:none}
+.opt.right{border-color:rgba(79,191,168,.7);background:rgba(79,191,168,.12);color:#d8f5ec}
+.opt.wrong{border-color:rgba(217,83,74,.65);background:rgba(217,83,74,.12);color:#ffd7d2}
+.opt.locked{cursor:default}
+.fb{font-size:11.6px;line-height:1.7;color:var(--teal);margin-top:4px;display:none}
+.fb.show{display:block}
+.fb.bad{color:#ffb4a6}
+.score{display:flex;align-items:center;gap:16px;margin-top:14px;font-size:12.5px;color:var(--dim);flex-wrap:wrap}
+.score b{color:var(--gold);font-size:17px;font-family:var(--serif)}
+.done{display:flex;align-items:center;gap:12px;margin-top:12px;padding:11px 14px;
+  border:1px dashed rgba(79,191,168,.45);border-radius:12px;background:rgba(79,191,168,.06);cursor:pointer}
+.done input{appearance:none;width:20px;height:20px;border:2px solid var(--teal);border-radius:6px;
+  flex:none;cursor:pointer;position:relative;background:transparent}
+.done input:checked{background:var(--teal)}
+.done input:checked::after{content:"✓";position:absolute;inset:0;color:#08120f;font-size:13px;
+  display:flex;align-items:center;justify-content:center;font-weight:700}
+.done span{font-size:12.5px;color:#a9d9cf}
+
+/* ================= 5. 响应式 ================= */
+@media(max-width:980px){
+  .split,.split.rev{grid-template-columns:1fr;gap:20px}
+  .map{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .qs{grid-template-columns:1fr}
+  .dots{display:none}
+  .where{display:none}
+}
+@media(max-width:640px){
+  body{font-size:15px}
+  .page{padding:18px 16px}
+  .steps{min-height:0}
+  .step{position:static;opacity:1;transform:none;pointer-events:auto;margin-bottom:16px}
+  .step:last-child{margin-bottom:0}
+  .tip{display:none}
+}
+@media(prefers-reduced-motion:reduce){
+  .a{opacity:1;transform:none}
+  .bg .orb,.bg .mesh{animation:none}
+  .page{transition:opacity .2s}
+}
+
+/* 页脚角标：对应原书节号 */
+.pfoot{position:absolute;right:clamp(20px,4vw,56px);bottom:12px;font:11px/1 var(--mono);
+  color:var(--dim);opacity:.8;letter-spacing:.06em;pointer-events:none}
+</style>
+</head>
+<body>
+
+<div class="bg" aria-hidden="true">
+  <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+  <div class="mesh"></div>
+</div>
+
+<div class="rail" id="rail"></div>
+<nav class="dots" id="dots" aria-label="页面导航"></nav>
+<div class="where" id="where"></div>
+<div class="counter" id="counter"><b>01</b> / 18</div>
+<div class="tip" id="tip"><i></i>滚动滚轮 · 或按 ↓ / 空格 翻页</div>
+
+<main class="deck" id="deck">
+  <!-- ========== 01 封面 ========== -->
+  <section class="page" data-title="封面 · 分岔">
+    <div class="page-inner center">
+      <div class="a kicker">CH.03 · BIFURCATIONS</div>
+      <h2 class="a" style="font-size:clamp(30px,4.6vw,56px)">分岔<br><span style="font-size:.52em;color:var(--mut);letter-spacing:.04em">Bifurcations · 参数一动，结构就换</span></h2>
+      <p class="a p" style="max-width:36em;margin:20px auto 0;color:var(--mut)">上一章的 <em>f(x)</em> 是死的。现在给它装一根旋钮 <em>μ</em>，慢慢拧。<br>大多数时候什么都没发生——但在某几个值上，不动点会成对出生、成对死掉，或者交换身份。</p>
+      <div class="a chips" style="justify-content:center">
+        <span>鞍结分岔</span><span>跨临界</span><span>叉式与对称破缺</span><span>激光阈值</span><span>旋转环</span><span>不完美与滞后</span><span>昆虫爆发</span>
+      </div>
+    </div>
+    <div class="pfoot">—</div>
+  </section>
+
+  <!-- ========== 02 §3.0 引言 ========== -->
+  <section class="page" data-title="参数是一根旋钮">
+    <div class="page-inner">
+      <div class="a kicker">§3.0 · 引言</div>
+      <h2 class="a">参数是一根旋钮，拧它会发生什么？</h2>
+      <p class="a p">真实系统里总有些量我们不去直接控制、却会慢慢改变：泵浦功率、转速、环境容量、药物剂量。把它们写成一个参数 <em>μ</em>，方程就成了</p>
+      <span class="a formula">ẋ = f(x, μ)</span>
+      <p class="a p">每固定一个 <em>μ</em>，你都能画出上一章那张图——零点、箭头、谷底山顶。问题在于：<strong>换个 μ，这张图会变吗？怎么变？</strong></p>
+      <p class="a p">答案有两层。第一层很无聊：零点会慢慢挪位置。第二层才有意思：在某几个特殊值上，<strong>零点的个数突然变了</strong>，或者稳定性突然换了手。那一刻叫<strong>分岔</strong>（bifurcation），那个参数值叫<strong>分岔点</strong> <em>μ_c</em>。</p>
+      <div class="a pull">分岔是"定性"的转折，不是"定量"的偏移。<cite>μ 稍微变一点，解的个数、稳定性、长期行为就换了一套——这类跳跃没法用"近似"糊过去。</cite></div>
+      <p class="a p">本章要回答：一维流里到底有几种基本的分岔方式？答案是<strong>三种</strong>（外加它们在不完美条件下的变种）。三种都会给出一张<strong>分岔图</strong>，而这三张图就是你以后识别一切分岔的字典。</p>
+    </div>
+    <div class="pfoot">§3.0 引言</div>
+  </section>
+
+  <!-- ========== 03 分岔图怎么读 ========== -->
+  <section class="page" data-title="分岔图：把一整族相图叠在一张纸上">
+    <div class="page-inner">
+      <div class="a kicker">HOW TO READ · 分岔图</div>
+      <h2 class="a">分岔图：把一整族相图叠在一张纸上</h2>
+      <p class="a p">横轴放参数 <em>μ</em>，纵轴放不动点的位置 <em>x*</em>。竖着切一刀，得到的是"这个 <em>μ</em> 下的全部不动点"——也就是上一章那张相图的骨架。整张图，就是无数张相图叠在一起。</p>
+      <p class="a p">读它只要三个动作：</p>
+      <p class="a p"><strong>① 看实线与虚线。</strong>实线＝稳定不动点（谷底），虚线＝不稳定（山顶）。这条约定全章统一。</p>
+      <p class="a p"><strong>② 找数目的突变。</strong>某一列上有一个点，旁边一列变成三个——这一列就是分岔点。<strong>个数变化才是分岔</strong>。</p>
+      <p class="a p"><strong>③ 看斜率。</strong>分岔点附近分支常以 √ 的形式张开：<em>x*</em> ∝ ±√(<em>μ</em>−<em>μ_c</em>)，曲线在分岔点处<strong>竖直</strong>。看到垂直切线，就去找分岔。</p>
+      <p class="a p">还有一条容易忽略的：分岔图上<strong>没有时间</strong>。它只说"哪些状态可以待着"，不说"多久到达"。动力学要看相图；分岔图只看骨架。</p>
+    </div>
+    <div class="pfoot">§3.1 鞍-结分岔</div>
+  </section>
+
+  <!-- ========== 04 演示 · 分岔实验室 ========== -->
+  <section class="page" data-title="演示 · 拧旋钮，看不动点生灭" data-steps="3" data-hook="flow">
+    <div class="page-inner">
+      <div class="split" style="grid-template-columns:1.12fr .88fr">
+        <div class="a demo">
+          <canvas id="cv1" height="372"></canvas>
+          <div class="ctrls">
+            <div class="slider"><span>参数 μ</span>
+              <input type="range" id="p1" min="-1" max="1" step="0.01" value="0.50"><b id="p1v">0.50</b></div>
+            <button class="btn" id="reset1">重来</button>
+          </div>
+          <div class="readout" id="ro1"></div>
+        </div>
+        <div class="a">
+          <div class="steps" id="st1">
+            <div class="step on">
+              <div class="snum">01 / 03 · 鞍结</div>
+              <h3><em>ẋ</em> = μ − <em>x</em>²：两个不动点凭空出生</h3>
+              <p>μ &lt; 0 时一个零点也没有，状态一路向左跑掉。把滑块推过 0，<strong>一对不动点同时出现</strong>：右边那个稳定（实线），左边那个不稳定（虚线）。</p>
+            </div>
+            <div class="step">
+              <div class="snum">02 / 03 · 跨临界</div>
+              <h3><em>ẋ</em> = μ<em>x</em> − <em>x</em>²：交换身份</h3>
+              <p>这里零点从来不会消失：<em>x*</em> = 0 一直都在。μ 过 0 时它把"稳定"这件外套<strong>脱给了</strong>新来的 <em>x*</em> = μ。个数不变，只是换了手。</p>
+            </div>
+            <div class="step">
+              <div class="snum">03 / 03 · 叉式</div>
+              <h3><em>ẋ</em> = μ<em>x</em> − <em>x</em>³：对称的两支一起张开</h3>
+              <p>μ &lt; 0 时只有 0 是稳定的。过 0 之后，0 失稳，<strong>左右对称地长出两支</strong>。系统本来对称，最终却只能挑一边住下——这就是对称破缺。</p>
+            </div>
+          </div>
+          <div class="sdots" id="sd1"><i class="on"></i><i></i><i></i></div>
+          <div class="readout" style="margin-top:14px">上图＝相图骨架（f 与流向），下图＝分岔图；金线＝当前 μ</div>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§3.1–3.2、§3.4</div>
+  </section>
+
+  <!-- ========== 05 §3.1 鞍结 ========== -->
+  <section class="page" data-title="鞍结分岔：两个不动点相撞，一起消失">
+    <div class="page-inner">
+      <div class="split">
+        <div>
+          <div class="a kicker">§3.1 · 鞍-结分岔</div>
+          <h2 class="a">鞍结分岔：两个不动点相撞，一起消失</h2>
+          <p class="a p">规范形（normal form）是</p>
+          <span class="a formula">ẋ = μ − x²</span>
+          <p class="a p">三种情形手算就够：<strong>μ &gt; 0</strong> 时有两个零点 <em>x*</em> = ±√<em>μ</em>；<strong>μ = 0</strong> 时合成一个 <em>x*</em> = 0；<strong>μ &lt; 0</strong> 时一个都没有。</p>
+          <p class="a p">稳定性由 <em>f′</em> = −2<em>x</em> 给出：<em>x*</em> = +√<em>μ</em> 处 <em>λ</em> &lt; 0（稳定），<em>x*</em> = −√<em>μ</em> 处 <em>λ</em> &gt; 0（不稳定）。所以在分岔图上，一条实线、一条虚线，从 <em>μ_c</em> = 0 处一起<strong>竖直地</strong>张开。</p>
+          <p class="a p">名字的来历：二维系统里这两个点分别是一个<strong>鞍点</strong>与一个<strong>结点</strong>（第 5、6 章），相撞后湮灭。一维里你看不到鞍，但习惯叫法沿用下来了——也叫折叠分岔（fold bifurcation）。</p>
+        </div>
+        <div class="a fig">
+          <!--FIG:A-->
+<svg viewBox="0 0 480 320" role="img" aria-label="鞍结分岔图"><line x1="184.0" y1="236.0" x2="184.0" y2="36.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="318.0" y1="236.0" x2="318.0" y2="36.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="452.0" y1="236.0" x2="452.0" y2="36.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="50.0" y1="200.5" x2="452.0" y2="200.5" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="50.0" y1="71.5" x2="452.0" y2="71.5" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="50.0" y1="136.0" x2="456.0" y2="136.0" stroke="rgba(255,255,255,.22)" stroke-width="1.2"/><line x1="184.0" y1="236.0" x2="184.0" y2="32.0" stroke="rgba(255,255,255,.22)" stroke-width="1.2"/><text x="450.0" y="129.0" fill="#8b95a4" font-size="11" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">μ</text><text x="191.0" y="38.0" fill="#8b95a4" font-size="11" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">x*</text><text x="56.7" y="49.5" fill="#5c6775" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">μ &lt; 0</text><text x="56.7" y="64.5" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">没有不动点</text><text x="56.7" y="77.5" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">ẋ 恒为负</text><path d="M184.0 136.0 L186.2 127.7 L188.5 124.2 L190.7 121.6 L192.9 119.3 L195.2 117.4 L197.4 115.6 L199.6 114.0 L201.9 112.4 L204.1 111.0 L206.3 109.7 L208.6 108.4 L210.8 107.1 L213.0 106.0 L215.3 104.8 L217.5 103.7 L219.7 102.7 L222.0 101.7 L224.2 100.7 L226.4 99.7 L228.7 98.8 L230.9 97.8 L233.1 96.9 L235.4 96.1 L237.6 95.2 L239.8 94.4 L242.1 93.5 L244.3 92.7 L246.5 91.9 L248.8 91.1 L251.0 90.4 L253.2 89.6 L255.5 88.9 L257.7 88.2 L259.9 87.4 L262.2 86.7 L264.4 86.0 L266.6 85.3 L268.9 84.7 L271.1 84.0 L273.3 83.3 L275.6 82.7 L277.8 82.0 L280.0 81.4 L282.3 80.8 L284.5 80.1 L286.7 79.5 L289.0 78.9 L291.2 78.3 L293.4 77.7 L295.7 77.1 L297.9 76.5 L300.1 75.9 L302.4 75.4 L304.6 74.8 L306.8 74.2 L309.1 73.7 L311.3 73.1 L313.5 72.6 L315.8 72.0 L318.0 71.5 L320.2 70.9 L322.5 70.4 L324.7 69.9 L326.9 69.4 L329.2 68.8 L331.4 68.3 L333.6 67.8 L335.9 67.3 L338.1 66.8 L340.3 66.3 L342.6 65.8 L344.8 65.3 L347.0 64.8 L349.3 64.4 L351.5 63.9 L353.7 63.4 L356.0 62.9 L358.2 62.4 L360.4 62.0 L362.7 61.5 L364.9 61.0 L367.1 60.6 L369.4 60.1 L371.6 59.7 L373.8 59.2 L376.1 58.8 L378.3 58.3 L380.5 57.9 L382.8 57.4 L385.0 57.0 L387.2 56.5 L389.5 56.1 L391.7 55.7 L393.9 55.2 L396.2 54.8 L398.4 54.4 L400.6 54.0 L402.9 53.5 L405.1 53.1 L407.3 52.7 L409.6 52.3 L411.8 51.9 L414.0 51.5 L416.3 51.1 L418.5 50.7 L420.7 50.2 L423.0 49.8 L425.2 49.4 L427.4 49.0 L429.7 48.6 L431.9 48.2 L434.1 47.9 L436.4 47.5 L438.6 47.1 L440.8 46.7 L443.1 46.3 L445.3 45.9 L447.5 45.5 L449.8 45.1 L452.0 44.8" fill="none" stroke="#ff9770" stroke-width="2.0" stroke-linejoin="round" stroke-linecap="round"/><path d="M184.0 136.0 L186.2 144.3 L188.5 147.8 L190.7 150.4 L192.9 152.7 L195.2 154.6 L197.4 156.4 L199.6 158.0 L201.9 159.6 L204.1 161.0 L206.3 162.3 L208.6 163.6 L210.8 164.9 L213.0 166.0 L215.3 167.2 L217.5 168.3 L219.7 169.3 L222.0 170.3 L224.2 171.3 L226.4 172.3 L228.7 173.2 L230.9 174.2 L233.1 175.1 L235.4 175.9 L237.6 176.8 L239.8 177.6 L242.1 178.5 L244.3 179.3 L246.5 180.1 L248.8 180.9 L251.0 181.6 L253.2 182.4 L255.5 183.1 L257.7 183.8 L259.9 184.6 L262.2 185.3 L264.4 186.0 L266.6 186.7 L268.9 187.3 L271.1 188.0 L273.3 188.7 L275.6 189.3 L277.8 190.0 L280.0 190.6 L282.3 191.2 L284.5 191.9 L286.7 192.5 L289.0 193.1 L291.2 193.7 L293.4 194.3 L295.7 194.9 L297.9 195.5 L300.1 196.1 L302.4 196.6 L304.6 197.2 L306.8 197.8 L309.1 198.3 L311.3 198.9 L313.5 199.4 L315.8 200.0 L318.0 200.5 L320.2 201.1 L322.5 201.6 L324.7 202.1 L326.9 202.6 L329.2 203.2 L331.4 203.7 L333.6 204.2 L335.9 204.7 L338.1 205.2 L340.3 205.7 L342.6 206.2 L344.8 206.7 L347.0 207.2 L349.3 207.6 L351.5 208.1 L353.7 208.6 L356.0 209.1 L358.2 209.6 L360.4 210.0 L362.7 210.5 L364.9 211.0 L367.1 211.4 L369.4 211.9 L371.6 212.3 L373.8 212.8 L376.1 213.2 L378.3 213.7 L380.5 214.1 L382.8 214.6 L385.0 215.0 L387.2 215.5 L389.5 215.9 L391.7 216.3 L393.9 216.8 L396.2 217.2 L398.4 217.6 L400.6 218.0 L402.9 218.5 L405.1 218.9 L407.3 219.3 L409.6 219.7 L411.8 220.1 L414.0 220.5 L416.3 220.9 L418.5 221.3 L420.7 221.8 L423.0 222.2 L425.2 222.6 L427.4 223.0 L429.7 223.4 L431.9 223.8 L434.1 224.1 L436.4 224.5 L438.6 224.9 L440.8 225.3 L443.1 225.7 L445.3 226.1 L447.5 226.5 L449.8 226.9 L452.0 227.2" fill="none" stroke="#5c6775" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="7 4"/><text x="320.7" y="63.7" fill="#ff9770" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">稳定支 x* = √μ</text><text x="324.7" y="212.1" fill="#5c6775" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">不稳支 x* = −√μ</text><line x1="244.3" y1="92.8" x2="201.4" y2="114.1" stroke="rgba(232,176,75,.75)" stroke-width="1.3"/><line x1="201.4" y1="114.1" x2="203.9" y2="109.7" stroke="rgba(232,176,75,.75)" stroke-width="1.3"/><line x1="201.4" y1="114.1" x2="206.4" y2="114.7" stroke="rgba(232,176,75,.75)" stroke-width="1.3"/><line x1="244.3" y1="179.2" x2="201.4" y2="157.9" stroke="rgba(232,176,75,.75)" stroke-width="1.3"/><line x1="201.4" y1="157.9" x2="206.4" y2="157.3" stroke="rgba(232,176,75,.75)" stroke-width="1.3"/><line x1="201.4" y1="157.9" x2="203.9" y2="162.3" stroke="rgba(232,176,75,.75)" stroke-width="1.3"/><circle cx="184.0" cy="136.0" r="5.6" fill="#e8b04b" stroke="#e8b04b" stroke-width="1.4"/><text x="194.0" y="124.0" fill="#e8b04b" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">鞍结点 μ_c = 0</text><text x="50.0" y="300.0" fill="#5c6775" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">两支在 μ_c 处相撞，然后一起消失。μ 越过 0 的那一刻，世界上多了一对不动点。</text></svg>
+<!--END:A-->
+          <div class="figcap">鞍结分岔图：<em>μ</em> &lt; 0 时一片空白，<em>μ</em> &gt; 0 时一支稳定、一支不稳定。两支在 <em>μ_c</em> = 0 处相撞（<strong>竖直切线</strong>是它的签名）。</div>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§3.1 鞍-结分岔</div>
+  </section>
+
+  <!-- ========== 06 §3.1 鞍结的机制 ========== -->
+  <section class="page" data-title="为什么是相撞，而不是擦肩而过">
+    <div class="page-inner">
+      <div class="a kicker">§3.1 · 机制</div>
+      <h2 class="a">为什么是相撞，而不是擦肩而过</h2>
+      <p class="a p">把 <em>f(x)</em> = <em>μ</em> − <em>x</em>² 的图画出来，然后把 <em>μ</em> 一点点往下调：整条抛物线在<strong>竖直平移</strong>。它和横轴的交点，先是两个（一上一下），然后合成一个（相切），然后没有。</p>
+      <p class="a p">"相切"这一刻就是分岔点。此时 <em>f</em> = 0 且 <em>f′</em> = 0——<strong>两个条件同时成立</strong>。这就是 §2.4 里判据失效的那个情形，也解释了为什么分岔总发生在 <em>λ</em> = 0 的地方。</p>
+      <p class="a p">分支的形状由什么决定？在 <em>μ</em> 略大于 0 处，<em>x*</em> = ±√<em>μ</em> ∝ (<em>μ</em>−<em>μ_c</em>)<sup>1/2</sup>。指数 1/2 是可以<strong>量出来</strong>的：在双对数图上量 <em>x*</em> 与 <em>μ</em>−<em>μ_c</em>，斜率会得到 0.5。数值与实验都这么认。</p>
+      <div class="split" style="margin-top:16px">
+        <div class="a card">
+          <h4>三个可检查的签名</h4>
+          <p>· 不动点个数：0 → 1 → 2<br>
+             · 分岔点处 <em>f</em> = 0 且 <em>f′</em> = 0（切触）<br>
+             · 分支在 <em>μ_c</em> 处竖直，<em>x*</em> ∝ ±√(<em>μ</em>−<em>μ_c</em>)</p>
+        </div>
+        <div class="a card" style="border-color:rgba(217,83,74,.30)">
+          <h4 style="color:#ffb4a6">一维里它会骗你一次</h4>
+          <p>现实中几乎见不到"恰好相撞"：参数总有别的成分。<strong>给 μ 加一个常数偏移，相撞就变成"贴一下又分开"</strong>——那就是 §3.6 的不完美分岔。所以实验里说"观察到鞍结分岔"，通常只是"在分辨率尺度内看起来像"。</p>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§3.1 鞍-结分岔</div>
+  </section>
+
+  <!-- ========== 07 §3.2 跨临界 ========== -->
+  <section class="page" data-title="跨临界分岔：稳定性换了手">
+    <div class="page-inner">
+      <div class="split rev">
+        <div class="a fig">
+          <!--FIG:B-->
+<svg viewBox="0 0 480 320" role="img" aria-label="跨临界分岔图"><line x1="64.6" y1="232.0" x2="64.6" y2="40.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="210.8" y1="232.0" x2="210.8" y2="40.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="357.0" y1="232.0" x2="357.0" y2="40.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="50.0" y1="214.5" x2="452.0" y2="214.5" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="50.0" y1="74.9" x2="452.0" y2="74.9" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="50.0" y1="144.7" x2="456.0" y2="144.7" stroke="rgba(255,255,255,.22)" stroke-width="1.2"/><line x1="210.8" y1="232.0" x2="210.8" y2="36.0" stroke="rgba(255,255,255,.22)" stroke-width="1.2"/><text x="450.0" y="137.7" fill="#8b95a4" font-size="11" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">μ</text><text x="217.8" y="42.0" fill="#8b95a4" font-size="11" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">x*</text><path d="M50.0 144.7 L210.8 144.7" fill="none" stroke="#ff9770" stroke-width="2.0" stroke-linejoin="round" stroke-linecap="round"/><path d="M210.8 144.7 L452.0 144.7" fill="none" stroke="#5c6775" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="7 4"/><path d="M50.0 221.5 L210.8 144.7" fill="none" stroke="#5c6775" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="7 4"/><path d="M210.8 144.7 L430.1 40.0" fill="none" stroke="#ff9770" stroke-width="2.0" stroke-linejoin="round" stroke-linecap="round"/><circle cx="210.8" cy="144.7" r="5.6" fill="#e8b04b" stroke="#e8b04b" stroke-width="1.4"/><text x="222.8" y="164.7" fill="#e8b04b" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">μ_c = 0：两支交叉</text><text x="61.7" y="134.7" fill="#ff9770" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">x* = 0 稳定</text><text x="240.0" y="134.7" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">x* = 0 不稳</text><text x="301.4" y="84.7" fill="#ff9770" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">x* = μ 稳定</text><text x="105.5" y="181.0" fill="#5c6775" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">x* = μ 不稳</text><text x="50.0" y="296.0" fill="#5c6775" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">注意：交叉前后各有一条支一直是稳的——稳定性是「换手」，不是「生灭」。</text></svg>
+<!--END:B-->
+          <div class="figcap">跨临界分岔：<em>x*</em> = 0 与 <em>x*</em> = <em>μ</em> 两条直线在原点交叉。交叉前后，各自把"稳定"让给对方。</div>
+        </div>
+        <div>
+          <div class="a kicker">§3.2 · 跨临界分岔</div>
+          <h2 class="a">跨临界分岔：稳定性换了手</h2>
+          <p class="a p">第二种规范形（transcritical bifurcation）：</p>
+          <span class="a formula">ẋ = μx − x² = x(μ − x)</span>
+          <p class="a p">零点永远是两个：<em>x*</em> = 0 和 <em>x*</em> = <em>μ</em>。<strong>没有一个会凭空出现或消失。</strong>变化的是稳定性：</p>
+          <p class="a p">· 对 <em>x*</em> = 0：<em>λ</em> = <em>f′</em>(0) = <em>μ</em>，所以 <em>μ</em> &lt; 0 稳定、<em>μ</em> &gt; 0 不稳定。<br>
+             · 对 <em>x*</em> = <em>μ</em>：<em>λ</em> = <em>μ</em> − 2<em>μ</em> = −<em>μ</em>，符号正好相反。</p>
+          <p class="a p">于是两条分支在 <em>μ_c</em> = 0 处交叉，稳定性在这一刻<strong>交换</strong>。分岔图上你看到的是两条直线穿过彼此，而不是一对新点冒出来。</p>
+          <p class="a p">这种分岔为什么"必须有"？因为很多系统里 <em>x</em> = 0 是一个不依赖参数的物理状态（无光、无粒子、无位移）。它不能消失，只能失稳。跨临界分岔就是<strong>零点旁边那个新状态把稳定性夺走</strong>的标准剧本。</p>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§3.2 跨临界分岔</div>
+  </section>
+
+  <!-- ========== 08 §3.2 何时会遇到跨临界 ========== -->
+  <section class="page" data-title="什么时候会遇到跨临界，而不是鞍结">
+    <div class="page-inner">
+      <div class="a kicker">§3.2 · 判据</div>
+      <h2 class="a">什么时候会遇到跨临界，而不是鞍结</h2>
+      <p class="a p">看 <em>f(x,μ)</em> 在原点附近的泰勒展开（下标表示偏导，后面乘的是增量）：</p>
+      <span class="a formula">f ≈ f(0,μ) + (∂f/∂x) · x + ½(∂²f/∂x²) · x² + …</span>
+      <p class="a p"><strong>跨临界的三个条件</strong>（缺一不可）：<br>
+         ① <em>f</em>(0,<em>μ</em>) ≡ 0 对<strong>一切</strong> μ 成立——平凡解 <em>x</em> = 0 永远在；<br>
+         ② <em>∂f</em>/<em>∂x</em>(0,<em>μ_c</em>) = 0——线性项恰在这一点过零，也就是稳定性换手的时刻；<br>
+         ③ <em>∂²f</em>/<em>∂x²</em> ≠ 0 且 <em>∂²f</em>/<em>∂x∂μ</em> ≠ 0——展开里必须真的有 <em>x</em>² 和 <em>μx</em> 两项。</p>
+      <p class="a p">三者一满足，重标度之后就得到 <em>μx</em> − <em>x</em>²。</p>
+      <p class="a p">反过来，只要 ① 不成立（<em>f</em>(0,<em>μ</em>) 不恒为零），零点就没有"永远存在"的资格，只能靠切触从无到有——那是鞍结。<strong>只看到"曲线恰好穿过原点"就判跨临界，是最常见的误判</strong>：那可能只是一次恰好路过原点的鞍结。</p>
+      <div class="split" style="margin-top:16px">
+        <div class="a card" style="border-color:rgba(79,191,168,.30)">
+          <h4 style="color:#a9e6d8">跨临界的典型场景</h4>
+          <p>平凡解天然存在：无激光时的光子数 <em>n</em> = 0；无人时的种群 <em>x</em> = 0；无疫情时的感染人数 <em>I</em> = 0。这类模型的阈值现象几乎都是跨临界。</p>
+        </div>
+        <div class="a card" style="border-color:rgba(232,176,75,.30)">
+          <h4 style="color:#f3d79a">一个常用的检验</h4>
+          <p>把 <em>ẋ</em> = <em>f</em> 改写成"<strong>ẋ = <em>x</em> · <em>g</em>(x,μ)</strong>"。若 <em>g</em>(0,<em>μ_c</em>) = 0，就是跨临界的信号。<em>μx</em> − <em>x</em>² 正好是 <em>x</em>(<em>μ</em> − <em>x</em>)（鞍结写不出这个形式）。</p>
+        </div>
+      </div>
+      <p class="a p" style="margin-top:16px">下一节就是它的实物版本——也是全书少数几个"分岔能直接量出来"的实验系统之一。</p>
+    </div>
+    <div class="pfoot">§3.2 跨临界分岔</div>
+  </section>
+
+  <!-- ========== 09 §3.3 激光 建模 ========== -->
+  <section class="page" data-title="激光是怎么突然亮起来的">
+    <div class="page-inner">
+      <div class="a kicker">§3.3 · 激光阈值</div>
+      <h2 class="a">激光是怎么"突然"亮起来的</h2>
+      <p class="a p">激光器里有两件事在竞争：<strong>受激辐射</strong>让光子数增加，<strong>逃逸与吸收</strong>让光子数减少。设 <em>n</em> = 光子数、<em>N</em> = 上下能级的粒子数反转、<em>G</em> = 增益系数、<em>k</em> = 光子衰减率：</p>
+      <span class="a formula">ṅ = GnN − kn</span>
+      <p class="a p">粒子数反转 <em>N</em> 自己也在变：泵浦在补充它，受激辐射在消耗它，严格地说这是两个变量的系统（第 6 章会算）。原书的处理是用<strong>准静态拟设</strong>把 <em>N</em> 消掉。理由是物理的：<strong>受激辐射是逐个消耗反转的</strong>——每发出一个光子，就有一个原子从高能级跌回低能级，所以 <em>N</em> 随 <em>n</em> 线性下降，取最简形式</p>
+      <span class="a formula">N = N₀ − αn ，  α &gt; 0</span>
+      <p class="a p"><em>N</em>₀ 由泵浦决定（泵得越猛，反转越高）；−<em>αn</em> 是"每多一个光子，就多消耗一点反转"。代回上式：</p>
+      <span class="a formula">ṅ = k(P − 1)n − Γn² ，  P = GN₀/k</span>
+      <p class="a p">其中 <em>P</em> = <em>GN</em>₀/<em>k</em> 是无量纲的<strong>泵浦强度</strong>（"增益是损耗的几倍"），而 <em>Γ</em> = <em>αG</em> 是<strong>常数</strong>——它不随泵浦变。这一点很关键：下一页"输出随泵浦线性增长"的斜率就靠它。</p>
+      <p class="a p">这一项的物理作用是把方程从指数增长里救出来：<strong>光子越多，每个光子分到的净增益越少</strong>；同时它把分岔钉在 <em>P</em> = 1——那里一阶项消失，正是跨临界分岔的签名。<br><strong>边界要说清：</strong>这个模型把受激原子的动力学压成了准静态，而且<strong>不含自发发射项</strong>，所以 <em>n</em>* = 0 是"精确的零"；真实激光在阈值以下仍有微光。补上这两样就是原书练习 3.3.1／3.3.2 的二维模型。</p>
+    </div>
+    <div class="pfoot">§3.3 激光阈值</div>
+  </section>
+
+  <!-- ========== 10 §3.3 激光阈值 ========== -->
+  <section class="page" data-title="阈值：零解交出稳定性">
+    <div class="page-inner">
+      <div class="split rev">
+        <div class="a fig">
+          <!--FIG:C-->
+<svg viewBox="0 0 480 320" role="img" aria-label="激光阈值：光子数随泵浦的分岔"><line x1="216.4" y1="232.0" x2="216.4" y2="40.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="378.9" y1="232.0" x2="378.9" y2="40.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="54.0" y1="175.5" x2="452.0" y2="175.5" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="54.0" y1="119.1" x2="452.0" y2="119.1" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="54.0" y1="62.6" x2="452.0" y2="62.6" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="54.0" y1="232.0" x2="456.0" y2="232.0" stroke="rgba(255,255,255,.22)" stroke-width="1.2"/><line x1="54.0" y1="232.0" x2="54.0" y2="36.0" stroke="rgba(255,255,255,.22)" stroke-width="1.2"/><line x1="216.4" y1="232.0" x2="216.4" y2="40.0" stroke="rgba(232,176,75,.55)" stroke-width="1.2" stroke-dasharray="5 4"/><text x="223.4" y="54.0" fill="#e8b04b" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">阈值 P = 1</text><text x="450.0" y="225.0" fill="#8b95a4" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">泵浦 P</text><text x="46.0" y="42.0" fill="#8b95a4" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">光子数 n</text><path d="M54.0 232.0 L216.4 232.0" fill="none" stroke="#ff9770" stroke-width="2.0" stroke-linejoin="round" stroke-linecap="round"/><path d="M216.4 232.0 L452.0 232.0" fill="none" stroke="#5c6775" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="7 4"/><path d="M216.4 232.0 L452.0 68.2" fill="none" stroke="#ff9770" stroke-width="2.0" stroke-linejoin="round" stroke-linecap="round"/><circle cx="216.4" cy="232.0" r="5.4" fill="#e8b04b" stroke="#e8b04b" stroke-width="1.4"/><text x="70.2" y="250.0" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">n* = 0：只有自发辐射，光不相干</text><text x="300.9" y="116.8" fill="#ff9770" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">n* = P − 1</text><text x="240.8" y="184.6" fill="#ff9770" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">自激振荡</text><text x="240.8" y="199.6" fill="#ff9770" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">相干光</text><text x="252.2" y="220.7" fill="#5c6775" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">纵轴：n 以 k/(αG) 为单位</text><text x="54.0" y="296.0" fill="#5c6775" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">泵浦越过阈值，零解失去稳定性，非零解接管——这正是跨临界分岔的形状。</text></svg>
+<!--END:C-->
+          <div class="figcap">激光的分岔图：泵浦 <em>P</em> &lt; 1 时唯一稳定的状态是 <em>n*</em> = 0（没有激光）。越过 <em>P</em> = 1，零解失稳，<em>n*</em> = <em>P</em> − 1 这支接管。</div>
+        </div>
+        <div>
+          <div class="a kicker">§3.3 · 阈值</div>
+          <h2 class="a">阈值：零解交出稳定性</h2>
+          <p class="a p">方程 <em>ṅ</em> = <em>k</em>(<em>P</em> − 1)<em>n</em> − <em>Γn</em>² 是 <em>n</em> 乘出来的，所以 <em>n*</em> = 0 永远是解。另一个解：</p>
+          <span class="a formula">n* = k(P − 1)/Γ</span>
+          <p class="a p">稳定性看导数：<em>f′</em>(<em>n</em>) = <em>k</em>(<em>P</em> − 1) − 2<em>Γn</em>。<br>
+             · 在 <em>n*</em> = 0：<em>λ</em> = <em>k</em>(<em>P</em> − 1)，<em>P</em> &lt; 1 时稳定。<br>
+             · 在 <em>n*</em> = <em>k</em>(<em>P</em>−1)/<em>Γ</em>：<em>λ</em> = −<em>k</em>(<em>P</em> − 1)，符号相反。</p>
+          <p class="a p">和 §3.2 一模一样：两条分支交叉，稳定性换手。<strong>这就是跨临界分岔，阈值在 <em>P</em> = 1：增益刚好补偿损耗。</strong></p>
+          <p class="a p">实验上对得上的三件事：<br>
+             ① 阈值以下是<strong>自发辐射</strong>——光弱、方向杂、相位乱，这在物理上就是"没有激光"；<br>
+             ② 越过阈值，输出功率随泵浦<strong>线性增长</strong>（<em>n*</em> ∝ <em>P</em>−1），斜率 <em>k</em>/<em>Γ</em> = 1/<em>α</em> 是<strong>常数</strong>；<br>
+             ③ 阈值处没有跳跃、没有滞后：<strong>跨临界是"软"的</strong>，功率从零平滑长出来。</p>
+          <p class="a p">条件：以上三条依赖准静态拟设（原子跟随光子）。弛豫不满足时会出现"开灯前的尖峰"与阻尼振荡——那是原书练习 3.3.1／3.3.2 的二维模型，正式机制是<strong>第 8 章的霍普夫分岔</strong>；一维模型看不见它。</p>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§3.3 激光阈值</div>
+  </section>
+
+  <!-- ========== 11 §3.4 叉式 ========== -->
+  <section class="page" data-title="叉式分岔：一支分成三支">
+    <div class="page-inner">
+      <div class="split">
+        <div>
+          <div class="a kicker">§3.4 · 叉式分岔</div>
+          <h2 class="a">叉式分岔：一支分成三支</h2>
+          <p class="a p">第三种规范形（pitchfork bifurcation），超临界版本：</p>
+          <span class="a formula">ẋ = μx − x³</span>
+          <p class="a p">零点：<em>x*</em> = 0 永远存在；另有 <em>x*</em> = ±√<em>μ</em>（只在 <em>μ</em> &gt; 0 时是两个实数）。稳定性：</p>
+          <p class="a p">· <em>f′</em> = <em>μ</em> − 3<em>x</em>²，在 0 处 <em>λ</em> = <em>μ</em>；<br>
+             · 在两支处 <em>λ</em> = <em>μ</em> − 3<em>μ</em> = −2<em>μ</em> &lt; 0（<em>μ</em> &gt; 0）。</p>
+          <p class="a p">所以 <em>μ</em> &lt; 0 时只有一个稳定点 0；<em>μ</em> &gt; 0 时 0 变不稳，两侧各长出一个稳定点。<strong>图上是"丫"字形，所以叫叉式。</strong></p>
+          <p class="a p">关键差异：鞍结是"无中生有一对"，跨临界是"换手"，叉式是<strong>一对一地分裂成两支</strong>——而它之所以能这么分裂，是因为方程<strong>对称</strong>：把 <em>x</em> 换成 −<em>x</em>，方程一字不变。这条对称性是叉式分岔的入场券，下一页专讲。</p>
+        </div>
+        <div class="a fig">
+          <!--FIG:D-->
+<svg viewBox="0 0 480 320" role="img" aria-label="超临界叉式分岔图"><line x1="64.6" y1="234.0" x2="64.6" y2="38.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="210.8" y1="234.0" x2="210.8" y2="38.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="357.0" y1="234.0" x2="357.0" y2="38.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="50.0" y1="201.3" x2="452.0" y2="201.3" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="50.0" y1="70.7" x2="452.0" y2="70.7" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="50.0" y1="136.0" x2="456.0" y2="136.0" stroke="rgba(255,255,255,.22)" stroke-width="1.2"/><line x1="210.8" y1="234.0" x2="210.8" y2="34.0" stroke="rgba(255,255,255,.22)" stroke-width="1.2"/><text x="450.0" y="129.0" fill="#8b95a4" font-size="11" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">μ</text><text x="217.8" y="40.0" fill="#8b95a4" font-size="11" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">x*</text><path d="M50.0 136.0 L210.8 136.0" fill="none" stroke="#ff9770" stroke-width="2.0" stroke-linejoin="round" stroke-linecap="round"/><path d="M210.8 136.0 L452.0 136.0" fill="none" stroke="#5c6775" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="7 4"/><path d="M210.8 136.0 L212.8 128.3 L214.8 125.2 L216.8 122.7 L218.8 120.7 L220.9 118.9 L222.9 117.2 L224.9 115.7 L226.9 114.3 L228.9 113.0 L230.9 111.8 L232.9 110.6 L234.9 109.5 L236.9 108.4 L238.9 107.3 L241.0 106.3 L243.0 105.4 L245.0 104.4 L247.0 103.5 L249.0 102.6 L251.0 101.7 L253.0 100.9 L255.0 100.1 L257.0 99.3 L259.0 98.5 L261.1 97.7 L263.1 96.9 L265.1 96.2 L267.1 95.5 L269.1 94.7 L271.1 94.0 L273.1 93.3 L275.1 92.7 L277.1 92.0 L279.1 91.3 L281.2 90.7 L283.2 90.0 L285.2 89.4 L287.2 88.8 L289.2 88.2 L291.2 87.5 L293.2 86.9 L295.2 86.4 L297.2 85.8 L299.2 85.2 L301.2 84.6 L303.3 84.0 L305.3 83.5 L307.3 82.9 L309.3 82.4 L311.3 81.8 L313.3 81.3 L315.3 80.8 L317.3 80.2 L319.3 79.7 L321.4 79.2 L323.4 78.7 L325.4 78.2 L327.4 77.7 L329.4 77.2 L331.4 76.7 L333.4 76.2 L335.4 75.7 L337.4 75.2 L339.4 74.7 L341.5 74.2 L343.5 73.8 L345.5 73.3 L347.5 72.8 L349.5 72.4 L351.5 71.9 L353.5 71.4 L355.5 71.0 L357.5 70.5 L359.5 70.1 L361.6 69.7 L363.6 69.2 L365.6 68.8 L367.6 68.3 L369.6 67.9 L371.6 67.5 L373.6 67.1 L375.6 66.6 L377.6 66.2 L379.6 65.8 L381.6 65.4 L383.7 65.0 L385.7 64.5 L387.7 64.1 L389.7 63.7 L391.7 63.3 L393.7 62.9 L395.7 62.5 L397.7 62.1 L399.7 61.7 L401.8 61.3 L403.8 60.9 L405.8 60.5 L407.8 60.2 L409.8 59.8 L411.8 59.4 L413.8 59.0 L415.8 58.6 L417.8 58.2 L419.8 57.9 L421.9 57.5 L423.9 57.1 L425.9 56.8 L427.9 56.4 L429.9 56.0 L431.9 55.7 L433.9 55.3 L435.9 54.9 L437.9 54.6 L439.9 54.2 L442.0 53.8 L444.0 53.5 L446.0 53.1 L448.0 52.8 L450.0 52.4 L452.0 52.1" fill="none" stroke="#ff9770" stroke-width="2.0" stroke-linejoin="round" stroke-linecap="round"/><path d="M210.8 136.0 L212.8 143.7 L214.8 146.8 L216.8 149.3 L218.8 151.3 L220.9 153.1 L222.9 154.8 L224.9 156.3 L226.9 157.7 L228.9 159.0 L230.9 160.2 L232.9 161.4 L234.9 162.5 L236.9 163.6 L238.9 164.7 L241.0 165.7 L243.0 166.6 L245.0 167.6 L247.0 168.5 L249.0 169.4 L251.0 170.3 L253.0 171.1 L255.0 171.9 L257.0 172.7 L259.0 173.5 L261.1 174.3 L263.1 175.1 L265.1 175.8 L267.1 176.5 L269.1 177.3 L271.1 178.0 L273.1 178.7 L275.1 179.3 L277.1 180.0 L279.1 180.7 L281.2 181.3 L283.2 182.0 L285.2 182.6 L287.2 183.2 L289.2 183.8 L291.2 184.5 L293.2 185.1 L295.2 185.6 L297.2 186.2 L299.2 186.8 L301.2 187.4 L303.3 188.0 L305.3 188.5 L307.3 189.1 L309.3 189.6 L311.3 190.2 L313.3 190.7 L315.3 191.2 L317.3 191.8 L319.3 192.3 L321.4 192.8 L323.4 193.3 L325.4 193.8 L327.4 194.3 L329.4 194.8 L331.4 195.3 L333.4 195.8 L335.4 196.3 L337.4 196.8 L339.4 197.3 L341.5 197.8 L343.5 198.2 L345.5 198.7 L347.5 199.2 L349.5 199.6 L351.5 200.1 L353.5 200.6 L355.5 201.0 L357.5 201.5 L359.5 201.9 L361.6 202.3 L363.6 202.8 L365.6 203.2 L367.6 203.7 L369.6 204.1 L371.6 204.5 L373.6 204.9 L375.6 205.4 L377.6 205.8 L379.6 206.2 L381.6 206.6 L383.7 207.0 L385.7 207.5 L387.7 207.9 L389.7 208.3 L391.7 208.7 L393.7 209.1 L395.7 209.5 L397.7 209.9 L399.7 210.3 L401.8 210.7 L403.8 211.1 L405.8 211.5 L407.8 211.8 L409.8 212.2 L411.8 212.6 L413.8 213.0 L415.8 213.4 L417.8 213.8 L419.8 214.1 L421.9 214.5 L423.9 214.9 L425.9 215.2 L427.9 215.6 L429.9 216.0 L431.9 216.3 L433.9 216.7 L435.9 217.1 L437.9 217.4 L439.9 217.8 L442.0 218.2 L444.0 218.5 L446.0 218.9 L448.0 219.2 L450.0 219.6 L452.0 219.9" fill="none" stroke="#ff9770" stroke-width="2.0" stroke-linejoin="round" stroke-linecap="round"/><circle cx="210.8" cy="136.0" r="5.6" fill="#e8b04b" stroke="#e8b04b" stroke-width="1.4"/><text x="220.8" y="124.0" fill="#e8b04b" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">μ_c = 0</text><text x="364.3" y="64.1" fill="#ff9770" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">x* = √μ（稳定）</text><text x="364.3" y="215.7" fill="#ff9770" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">x* = −√μ（稳定）</text><text x="254.7" y="153.0" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">x* = 0 不稳</text><text x="71.9" y="127.0" fill="#ff9770" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">x* = 0 稳定</text><text x="50.0" y="298.0" fill="#5c6775" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">对称的两支从 μ_c 处以 √(μ−μ_c) 的速度张开：这就是「对称破缺」的形状。</text></svg>
+<!--END:D-->
+          <div class="figcap">超临界叉式分岔：<em>μ</em> &lt; 0 只有一条稳定支；<em>μ</em> &gt; 0 时中间那支变虚，两侧各长出一条实线。两支严格对称。</div>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§3.4 叉式分岔</div>
+  </section>
+
+  <!-- ========== 12 §3.4 对称破缺 ========== -->
+  <section class="page" data-title="对称的方程，为什么给不对称的解">
+    <div class="page-inner">
+      <div class="a kicker">§3.4 · 对称破缺</div>
+      <h2 class="a">对称的方程，为什么给不对称的解</h2>
+      <p class="a p">方程 <em>ẋ</em> = <em>μx</em> − <em>x</em>³ 在 <em>x</em> → −<em>x</em> 下不变。这意味着：<strong>若 <em>x(t)</em> 是解，则 −<em>x(t)</em> 也是解。</strong></p>
+      <p class="a p">可系统最终只能待在一处。若它落在 <em>x*</em> = +√<em>μ</em>，那 −√<em>μ</em> 那条路它就再也走不到了——<strong>解本身破坏了方程的对称性</strong>。这叫<strong>对称破缺</strong>（spontaneous symmetry breaking）：对称性没丢，只是被"选一个"这件事藏起来了。</p>
+      <div class="split" style="margin-top:16px">
+        <div class="a card" style="border-color:rgba(79,191,168,.30)">
+          <h4 style="color:#a9e6d8">对称性在数学上省了什么</h4>
+          <p>把 <em>f</em> 按 <em>x</em> 展开，奇对称<strong>一口气杀掉常数项与 <em>x</em>² 项</strong>，只剩 <em>a(μ)x</em> + <em>b(μ)x</em>³ + …。<br>于是"零点"和"三支"这两件事都成了代数结果，不用逐项验证（推导 2 会走一遍）。</p>
+        </div>
+        <div class="a card" style="border-color:rgba(217,83,74,.30)">
+          <h4 style="color:#ffb4a6">现实为什么总是不完美的</h4>
+          <p>真实的环、梁、电路都有微小不对称：加工误差、重力、地磁。<strong>只要加一个常数项 <em>h</em>，叉子就断成两支</strong>——下面是 §3.6 的故事，也是所有"理想分岔"在实验室里活不长的原因。</p>
+        </div>
+      </div>
+      <p class="a p" style="margin-top:16px">还有一件事值得提前记住：如果三次项系数反号（<em>ẋ</em> = <em>μx</em> + <em>x</em>³），非零支会出现在 <em>μ</em> &lt; 0 一侧，并且是<strong>不稳定</strong>的。那是<strong>亚临界</strong>叉式分岔，会带来跳跃与滞后——第 8 章的 Hopf 分岔有完全相同的两种版本。</p>
+    </div>
+    <div class="pfoot">§3.4 叉式分岔</div>
+  </section>
+
+  <!-- ========== 13 §3.5 旋转环 装置 ========== -->
+  <section class="page" data-title="旋转环上的珠子：一个能拿在手里的分岔">
+    <div class="page-inner">
+      <div class="a kicker">§3.5 · 旋转环上的过阻尼珠子</div>
+      <h2 class="a">旋转环上的珠子：一个能拿在手里的分岔</h2>
+      <p class="a p">拿一个圆环，让它绕竖直直径以角速度 <em>ω</em> 旋转，环上套一颗珠子（bead），泡在黏稠液体里。这就是原书那个经典装置——因为<strong>所有参数都能拧</strong>，它几乎是叉式分岔的实体模型。</p>
+      <p class="a p">设 <em>φ</em> 从最低点量起。沿切向有两个力：重力把珠子拉回最低点（−<em>g</em> sin <em>φ</em>），离心力把它推离转轴（切向分量 ∝ <em>ω</em>² sin <em>φ</em> cos <em>φ</em>）。过阻尼时惯性可忽略，力矩平衡给出</p>
+      <span class="a formula">φ̇ = (sin φ / b)(ω² cos φ − g/R)</span>
+      <p class="a p">其中 <em>b</em> 是阻尼系数、<em>R</em> 是环半径。定一个临界转速 <em>ω_c</em>² = <em>g</em>/<em>R</em>，再令 <em>μ</em> = <em>ω</em>²/<em>ω_c</em>²：</p>
+      <span class="a formula">φ̇ ∝ sin φ · (μ cos φ − 1)</span>
+      <p class="a p">物理读法：<strong>转速不够时，重力赢</strong>，珠子待在最低点；<strong>转速够快时，离心力赢了</strong>，最低点不再是舒服的位置——珠子被甩到两侧某个高度上，在那里重力的切向分量恰好抵消离心力的切向分量。</p>
+      <p class="a p">注意这个装置的边界：忽略惯性要求 <em>m</em>/<em>b</em> 足够小（§2.6 案例）。把珠子改放进水里，它就会绕着新平衡点摆动，那时模型是二维的。</p>
+    </div>
+    <div class="pfoot">§3.5 旋转环上的过阻尼珠子</div>
+  </section>
+
+  <!-- ========== 14 §3.5 环的分岔图 ========== -->
+  <section class="page" data-title="珠子偏出来的角度 ∝ √(ω²−ω_c²)">
+    <div class="page-inner">
+      <div class="split">
+        <div>
+          <div class="a kicker">§3.5 · 解出来</div>
+          <h2 class="a">偏出来的角度 ∝ √(<em>ω</em>²−<em>ω_c</em>²)，高度是线性的</h2>
+          <p class="a p">零点：<em>f</em> = sin <em>φ</em>(<em>μ</em> cos <em>φ</em> − 1) = 0。<br>
+             ① sin <em>φ</em> = 0 → <em>φ*</em> = 0（最低点）或 π（最高点）；<br>
+             ② cos <em>φ*</em> = 1/<em>μ</em>，<strong>只在 <em>μ</em> &gt; 1 时有解</strong>，给出对称的两个新平衡位置。</p>
+          <p class="a p">稳定性算一次就够：<em>f′</em> = <em>μ</em>(2cos²<em>φ</em> − 1) − cos <em>φ</em>。<br>
+             · <em>φ*</em> = 0：<em>f′</em> = <em>μ</em> − 1 → <em>μ</em> &lt; 1 稳定 ✓<br>
+             · <em>φ*</em> = π：<em>f′</em> = <em>μ</em> + 1 &gt; 0 → <strong>永远不稳定</strong>（飞轮不会停在正上方）<br>
+             · cos <em>φ*</em> = 1/<em>μ</em>：<em>f′</em> = 1/<em>μ</em> − <em>μ</em> &lt; 0（<em>μ</em> &gt; 1）→ 稳定 ✓</p>
+          <p class="a p">把纵轴取成 cos <em>φ*</em> 而不是 <em>φ*</em>，图就变成标准叉式：一支在顶上（<em>φ*</em> = 0），一支在底下（<em>φ*</em> = π），第三支是 cos <em>φ*</em> = 1/<em>μ</em>。</p>
+          <p class="a p">张开得有多快？令 <em>δ</em> = <em>μ</em> − 1 很小，cos <em>φ*</em> = 1/(1+<em>δ</em>) ≈ 1 − <em>δ</em>，而 1 − cos <em>φ*</em> ≈ <em>φ*</em>²/2，所以 <strong><em>φ*</em> ≈ ±√(2<em>δ</em>)</strong>：<em>φ*</em> ∝ √(<em>ω</em>²−<em>ω_c</em>²)。指数又是 1/2——这是叉式分岔的指纹。<br>顺便把"高度"说清：珠子偏出去的高度是 <em>R</em>(1 − cos <em>φ*</em>) ≈ <em>Rφ*</em>²/2 ∝ <em>δ</em>，<strong>角度按 √ 张开，高度却是线性的</strong>。量的是哪一个，标度指数就不同——实验报数时必须讲清楚。</p>
+        </div>
+        <div class="a fig">
+          <!--FIG:E-->
+<svg viewBox="0 0 480 320" role="img" aria-label="旋转环上的过阻尼珠子的分岔图"><line x1="92.0" y1="68.0" x2="92.0" y2="212.0" stroke="rgba(255,255,255,.16)" stroke-width="1.1" stroke-dasharray="4 4"/><path d="M92.0 196.0 L94.9 195.9 L97.9 195.7 L100.8 195.3 L103.6 194.8 L106.5 194.1 L109.3 193.3 L112.1 192.3 L114.8 191.2 L117.4 189.9 L120.0 188.5 L122.5 187.0 L124.9 185.3 L127.2 183.5 L129.5 181.6 L131.6 179.6 L133.6 177.5 L135.5 175.2 L137.3 172.9 L139.0 170.5 L140.5 168.0 L141.9 165.4 L143.2 162.8 L144.3 160.1 L145.3 157.3 L146.1 154.5 L146.8 151.6 L147.3 148.8 L147.7 145.9 L147.9 142.9 L148.0 140.0 L147.9 137.1 L147.7 134.1 L147.3 131.2 L146.8 128.4 L146.1 125.5 L145.3 122.7 L144.3 119.9 L143.2 117.2 L141.9 114.6 L140.5 112.0 L139.0 109.5 L137.3 107.1 L135.5 104.8 L133.6 102.5 L131.6 100.4 L129.5 98.4 L127.2 96.5 L124.9 94.7 L122.5 93.0 L120.0 91.5 L117.4 90.1 L114.8 88.8 L112.1 87.7 L109.3 86.7 L106.5 85.9 L103.6 85.2 L100.8 84.7 L97.9 84.3 L94.9 84.1 L92.0 84.0 L89.1 84.1 L86.1 84.3 L83.2 84.7 L80.4 85.2 L77.5 85.9 L74.7 86.7 L71.9 87.7 L69.2 88.8 L66.6 90.1 L64.0 91.5 L61.5 93.0 L59.1 94.7 L56.8 96.5 L54.5 98.4 L52.4 100.4 L50.4 102.5 L48.5 104.8 L46.7 107.1 L45.0 109.5 L43.5 112.0 L42.1 114.6 L40.8 117.2 L39.7 119.9 L38.7 122.7 L37.9 125.5 L37.2 128.4 L36.7 131.2 L36.3 134.1 L36.1 137.1 L36.0 140.0 L36.1 142.9 L36.3 145.9 L36.7 148.8 L37.2 151.6 L37.9 154.5 L38.7 157.3 L39.7 160.1 L40.8 162.8 L42.1 165.4 L43.5 168.0 L45.0 170.5 L46.7 172.9 L48.5 175.2 L50.4 177.5 L52.4 179.6 L54.5 181.6 L56.8 183.5 L59.1 185.3 L61.5 187.0 L64.0 188.5 L66.6 189.9 L69.2 191.2 L71.9 192.3 L74.7 193.3 L77.5 194.1 L80.4 194.8 L83.2 195.3 L86.1 195.7 L89.1 195.9 L92.0 196.0" fill="none" stroke="rgba(255,255,255,.38)" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/><circle cx="92.0" cy="196.0" r="3.0" fill="#5c6775" stroke="#5c6775" stroke-width="1.0"/><circle cx="92.0" cy="84.0" r="3.0" fill="#5c6775" stroke="#5c6775" stroke-width="1.0"/><circle cx="137.6" cy="172.6" r="6.0" fill="#ff9770" stroke="#ff9770" stroke-width="1.4"/><line x1="92.0" y1="140.0" x2="137.6" y2="172.6" stroke="rgba(255,151,112,.5)" stroke-width="1.1" stroke-dasharray="4 3"/><path d="M38.0 97.1 L39.9 94.7 L42.0 92.4 L44.2 90.2 L46.5 88.1 L48.9 86.1 L51.3 84.2 L53.9 82.5 L56.5 80.8 L59.2 79.3 L62.0 77.9 L64.8 76.6 L67.7 75.4 L70.6 74.4 L73.6 73.5 L76.6 72.7 L79.6 72.1 L82.7 71.6 L85.8 71.3 L88.9 71.1 L92.0 71.0 L95.1 71.1 L98.2 71.3 L101.3 71.6 L104.4 72.1 L107.4 72.7 L110.4 73.5 L113.4 74.4 L116.3 75.4 L119.2 76.6 L122.0 77.9 L124.8 79.3 L127.5 80.8 L130.1 82.5 L132.7 84.2 L135.1 86.1 L137.5 88.1 L139.8 90.2 L142.0 92.4 L144.1 94.7 L146.0 97.1" fill="none" stroke="rgba(98,208,255,.75)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/><line x1="144.1" y1="94.7" x2="146.0" y2="97.1" stroke="rgba(98,208,255,.75)" stroke-width="1.5"/><line x1="146.0" y1="97.1" x2="141.3" y2="95.7" stroke="rgba(98,208,255,.75)" stroke-width="1.5"/><line x1="146.0" y1="97.1" x2="145.5" y2="92.1" stroke="rgba(98,208,255,.75)" stroke-width="1.5"/><text x="98.0" y="79.0" fill="#62d0ff" font-size="11" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">ω</text><text x="116.0" y="202.0" fill="#ff9770" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">φ</text><text x="46.0" y="222.0" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">过阻尼珠子</text><line x1="308.1" y1="240.0" x2="308.1" y2="36.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="402.2" y1="240.0" x2="402.2" y2="36.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="214.0" y1="140.2" x2="454.0" y2="140.2" stroke="rgba(255,255,255,.06)" stroke-width="1.0"/><line x1="214.0" y1="53.4" x2="454.0" y2="53.4" stroke="rgba(255,255,255,.06)" stroke-width="1.0"/><line x1="214.0" y1="227.0" x2="454.0" y2="227.0" stroke="rgba(255,255,255,.06)" stroke-width="1.0"/><line x1="214.0" y1="140.2" x2="458.0" y2="140.2" stroke="rgba(255,255,255,.10)" stroke-width="1.0"/><line x1="214.0" y1="240.0" x2="214.0" y2="32.0" stroke="rgba(255,255,255,.22)" stroke-width="1.1"/><line x1="214.0" y1="240.0" x2="458.0" y2="240.0" stroke="rgba(255,255,255,.14)" stroke-width="1.0"/><line x1="308.1" y1="240.0" x2="308.1" y2="36.0" stroke="rgba(232,176,75,.5)" stroke-width="1.2" stroke-dasharray="5 4"/><text x="314.1" y="262.0" fill="#e8b04b" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">ω_c² = g/R</text><text x="452.0" y="232.0" fill="#8b95a4" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">ω²R/g</text><text x="206.0" y="38.0" fill="#8b95a4" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">cos φ*</text><path d="M214.0 53.4 L308.1 53.4" fill="none" stroke="#ff9770" stroke-width="2.0" stroke-linejoin="round" stroke-linecap="round"/><path d="M308.1 53.4 L454.0 53.4" fill="none" stroke="#5c6775" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="7 4"/><path d="M214.0 227.0 L454.0 227.0" fill="none" stroke="#5c6775" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="7 4"/><path d="M308.1 53.4 L309.3 54.5 L310.5 55.5 L311.8 56.6 L313.0 57.6 L314.2 58.6 L315.4 59.6 L316.6 60.6 L317.8 61.5 L319.1 62.4 L320.3 63.3 L321.5 64.2 L322.7 65.0 L323.9 65.8 L325.1 66.7 L326.4 67.5 L327.6 68.2 L328.8 69.0 L330.0 69.7 L331.2 70.5 L332.4 71.2 L333.6 71.9 L334.9 72.6 L336.1 73.2 L337.3 73.9 L338.5 74.6 L339.7 75.2 L340.9 75.8 L342.2 76.4 L343.4 77.0 L344.6 77.6 L345.8 78.2 L347.0 78.7 L348.2 79.3 L349.5 79.9 L350.7 80.4 L351.9 80.9 L353.1 81.4 L354.3 81.9 L355.5 82.4 L356.7 82.9 L358.0 83.4 L359.2 83.9 L360.4 84.4 L361.6 84.8 L362.8 85.3 L364.0 85.7 L365.3 86.2 L366.5 86.6 L367.7 87.0 L368.9 87.4 L370.1 87.8 L371.3 88.2 L372.5 88.6 L373.8 89.0 L375.0 89.4 L376.2 89.8 L377.4 90.2 L378.6 90.5 L379.8 90.9 L381.1 91.3 L382.3 91.6 L383.5 92.0 L384.7 92.3 L385.9 92.6 L387.1 93.0 L388.4 93.3 L389.6 93.6 L390.8 94.0 L392.0 94.3 L393.2 94.6 L394.4 94.9 L395.6 95.2 L396.9 95.5 L398.1 95.8 L399.3 96.1 L400.5 96.4 L401.7 96.6 L402.9 96.9 L404.2 97.2 L405.4 97.5 L406.6 97.7 L407.8 98.0 L409.0 98.3 L410.2 98.5 L411.5 98.8 L412.7 99.0 L413.9 99.3 L415.1 99.5 L416.3 99.8 L417.5 100.0 L418.7 100.3 L420.0 100.5 L421.2 100.7 L422.4 101.0 L423.6 101.2 L424.8 101.4 L426.0 101.6 L427.3 101.9 L428.5 102.1 L429.7 102.3 L430.9 102.5 L432.1 102.7 L433.3 102.9 L434.5 103.1 L435.8 103.3 L437.0 103.5 L438.2 103.7 L439.4 103.9 L440.6 104.1 L441.8 104.3 L443.1 104.5 L444.3 104.7 L445.5 104.9 L446.7 105.1 L447.9 105.2 L449.1 105.4 L450.4 105.6 L451.6 105.8 L452.8 106.0 L454.0 106.1" fill="none" stroke="#ff9770" stroke-width="2.0" stroke-linejoin="round" stroke-linecap="round"/><circle cx="308.1" cy="53.4" r="5.2" fill="#e8b04b" stroke="#e8b04b" stroke-width="1.4"/><text x="313.8" y="43.4" fill="#e8b04b" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">分岔点</text><text x="219.6" y="43.4" fill="#ff9770" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">φ* = 0（最低点）</text><text x="374.0" y="95.0" fill="#ff9770" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">cos φ* = g/(ω²R)</text><text x="341.1" y="243.0" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">φ* = π（最高点，恒不稳）</text><text x="12.0" y="302.0" fill="#5c6775" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">越过 ω_c：最低点失稳，珠子偏到两侧。</text></svg>
+<!--END:E-->
+          <div class="figcap">左：装置——环绕竖直轴转动，珠子角度 <em>φ</em> 从最低点量起。右：分岔图，纵轴用 cos <em>φ*</em>。最低点那支在 <em>ω_c</em> 处失稳，新平衡位置从 cos <em>φ*</em> = 1 处张开。</div>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§3.5 旋转环上的过阻尼珠子</div>
+  </section>
+
+  <!-- ========== 15 §3.6 不完美分岔 ========== -->
+  <section class="page" data-title="加一个常数项，叉子就断了">
+    <div class="page-inner">
+      <div class="split rev">
+        <div class="a fig">
+          <!--FIG:F-->
+<svg viewBox="0 0 480 320" role="img" aria-label="不完美分岔（断开后的叉式）"><line x1="57.1" y1="232.0" x2="57.1" y2="40.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="198.1" y1="232.0" x2="198.1" y2="40.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="339.2" y1="232.0" x2="339.2" y2="40.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="50.0" y1="208.0" x2="452.0" y2="208.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="50.0" y1="139.4" x2="452.0" y2="139.4" stroke="rgba(255,255,255,.22)" stroke-width="1.2"/><line x1="50.0" y1="70.9" x2="452.0" y2="70.9" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="198.1" y1="232.0" x2="198.1" y2="36.0" stroke="rgba(255,255,255,.22)" stroke-width="1.2"/><text x="450.0" y="132.4" fill="#8b95a4" font-size="11" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">μ</text><text x="205.1" y="42.0" fill="#8b95a4" font-size="11" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">x*</text><path d="M198.1 139.4 L200.6 130.2 L203.2 126.4 L205.7 123.5 L208.3 121.0 L210.8 118.9 L213.3 116.9 L215.9 115.1 L218.4 113.4 L221.0 111.8 L223.5 110.3 L226.0 108.9 L228.6 107.6 L231.1 106.3 L233.7 105.0 L236.2 103.8 L238.7 102.6 L241.3 101.5 L243.8 100.4 L246.3 99.3 L248.9 98.3 L251.4 97.3 L254.0 96.3 L256.5 95.3 L259.0 94.4 L261.6 93.4 L264.1 92.5 L266.7 91.6 L269.2 90.7 L271.7 89.9 L274.3 89.0 L276.8 88.2 L279.4 87.4 L281.9 86.6 L284.4 85.8 L287.0 85.0 L289.5 84.2 L292.0 83.5 L294.6 82.7 L297.1 82.0 L299.7 81.2 L302.2 80.5 L304.7 79.8 L307.3 79.1 L309.8 78.4 L312.4 77.7 L314.9 77.0 L317.4 76.4 L320.0 75.7 L322.5 75.0 L325.1 74.4 L327.6 73.7 L330.1 73.1 L332.7 72.5 L335.2 71.8 L337.7 71.2 L340.3 70.6 L342.8 70.0 L345.4 69.4 L347.9 68.8 L350.4 68.2 L353.0 67.6 L355.5 67.0 L358.1 66.4 L360.6 65.8 L363.1 65.3 L365.7 64.7 L368.2 64.1 L370.8 63.6 L373.3 63.0 L375.8 62.5 L378.4 61.9 L380.9 61.4 L383.4 60.8 L386.0 60.3 L388.5 59.8 L391.1 59.2 L393.6 58.7 L396.1 58.2 L398.7 57.7 L401.2 57.1 L403.8 56.6 L406.3 56.1 L408.8 55.6 L411.4 55.1 L413.9 54.6 L416.5 54.1 L419.0 53.6 L421.5 53.1 L424.1 52.6 L426.6 52.2 L429.1 51.7 L431.7 51.2 L434.2 50.7 L436.8 50.2 L439.3 49.8 L441.8 49.3 L444.4 48.8 L446.9 48.4 L449.5 47.9 L452.0 47.4" fill="none" stroke="rgba(139,149,164,.32)" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="3 4"/><path d="M198.1 139.4 L200.6 148.6 L203.2 152.4 L205.7 155.4 L208.3 157.8 L210.8 160.0 L213.3 162.0 L215.9 163.8 L218.4 165.4 L221.0 167.0 L223.5 168.5 L226.0 169.9 L228.6 171.3 L231.1 172.6 L233.7 173.9 L236.2 175.1 L238.7 176.2 L241.3 177.4 L243.8 178.5 L246.3 179.5 L248.9 180.6 L251.4 181.6 L254.0 182.6 L256.5 183.5 L259.0 184.5 L261.6 185.4 L264.1 186.3 L266.7 187.2 L269.2 188.1 L271.7 189.0 L274.3 189.8 L276.8 190.7 L279.4 191.5 L281.9 192.3 L284.4 193.1 L287.0 193.9 L289.5 194.6 L292.0 195.4 L294.6 196.1 L297.1 196.9 L299.7 197.6 L302.2 198.3 L304.7 199.1 L307.3 199.8 L309.8 200.5 L312.4 201.1 L314.9 201.8 L317.4 202.5 L320.0 203.2 L322.5 203.8 L325.1 204.5 L327.6 205.1 L330.1 205.8 L332.7 206.4 L335.2 207.0 L337.7 207.7 L340.3 208.3 L342.8 208.9 L345.4 209.5 L347.9 210.1 L350.4 210.7 L353.0 211.3 L355.5 211.9 L358.1 212.4 L360.6 213.0 L363.1 213.6 L365.7 214.2 L368.2 214.7 L370.8 215.3 L373.3 215.8 L375.8 216.4 L378.4 216.9 L380.9 217.5 L383.4 218.0 L386.0 218.6 L388.5 219.1 L391.1 219.6 L393.6 220.2 L396.1 220.7 L398.7 221.2 L401.2 221.7 L403.8 222.2 L406.3 222.7 L408.8 223.2 L411.4 223.7 L413.9 224.2 L416.5 224.7 L419.0 225.2 L421.5 225.7 L424.1 226.2 L426.6 226.7 L429.1 227.2 L431.7 227.7 L434.2 228.1 L436.8 228.6 L439.3 229.1 L441.8 229.6 L444.4 230.0 L446.9 230.5 L449.5 231.0 L452.0 231.4" fill="none" stroke="rgba(139,149,164,.32)" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="3 4"/><path d="M51.8 127.8 L57.1 127.4 L62.2 127.0 L66.9 126.6 L71.4 126.2 L75.6 125.8 L79.6 125.4 L83.5 125.0 L87.1 124.6 L90.6 124.2 L93.9 123.8 L97.1 123.4 L100.2 123.0 L103.1 122.6 L106.0 122.2 L108.7 121.8 L111.3 121.4 L113.9 121.0 L116.4 120.6 L118.8 120.2 L121.1 119.8 L123.4 119.4 L125.6 119.0 L127.7 118.6 L129.8 118.2 L131.8 117.8 L133.8 117.4 L135.8 117.0 L137.7 116.5 L139.6 116.1 L141.4 115.7 L143.2 115.3 L145.0 114.9 L146.8 114.5 L148.5 114.1 L150.2 113.7 L151.9 113.3 L153.5 112.9 L155.2 112.5 L156.8 112.1 L158.4 111.7 L159.9 111.3 L161.5 110.9 L163.0 110.5 L164.6 110.1 L166.1 109.7 L167.6 109.3 L169.1 108.9 L170.6 108.5 L172.1 108.1 L173.5 107.7 L175.0 107.3 L176.5 106.9 L177.9 106.5 L179.3 106.1 L180.8 105.7 L182.2 105.2 L183.6 104.8 L185.1 104.4 L186.5 104.0 L187.9 103.6 L189.3 103.2 L190.7 102.8 L192.1 102.4 L193.5 102.0 L194.9 101.6 L196.4 101.2 L197.8 100.8 L199.2 100.4 L200.6 100.0 L202.0 99.6 L203.4 99.2 L204.8 98.8 L206.2 98.4 L207.6 98.0 L209.0 97.6 L210.4 97.2 L211.9 96.8 L213.3 96.4 L214.7 96.0 L216.1 95.6 L217.6 95.2 L219.0 94.8 L220.4 94.4 L221.9 94.0 L223.3 93.5 L224.8 93.1 L226.2 92.7 L227.7 92.3 L229.1 91.9 L230.6 91.5 L232.1 91.1 L233.5 90.7 L235.0 90.3 L236.5 89.9 L238.0 89.5 L239.5 89.1 L241.0 88.7 L242.5 88.3 L244.0 87.9 L245.5 87.5 L247.0 87.1 L248.5 86.7 L250.1 86.3 L251.6 85.9 L253.2 85.5 L254.7 85.1 L256.3 84.7 L257.8 84.3 L259.4 83.9 L261.0 83.5 L262.6 83.1 L264.1 82.7 L265.7 82.2 L267.3 81.8 L269.0 81.4 L270.6 81.0 L272.2 80.6 L273.8 80.2 L275.5 79.8 L277.1 79.4 L278.8 79.0 L280.4 78.6 L282.1 78.2 L283.8 77.8 L285.4 77.4 L287.1 77.0 L288.8 76.6 L290.5 76.2 L292.2 75.8 L294.0 75.4 L295.7 75.0 L297.4 74.6 L299.2 74.2 L300.9 73.8 L302.7 73.4 L304.4 73.0 L306.2 72.6 L308.0 72.2 L309.8 71.8 L311.6 71.4 L313.4 70.9 L315.2 70.5 L317.0 70.1 L318.8 69.7 L320.7 69.3 L322.5 68.9 L324.4 68.5 L326.2 68.1 L328.1 67.7 L330.0 67.3 L331.8 66.9 L333.7 66.5 L335.6 66.1 L337.5 65.7 L339.5 65.3 L341.4 64.9 L343.3 64.5 L345.3 64.1 L347.2 63.7 L349.2 63.3 L351.2 62.9 L353.1 62.5 L355.1 62.1 L357.1 61.7 L359.1 61.3 L361.1 60.9 L363.1 60.5 L365.2 60.1 L367.2 59.6 L369.3 59.2 L371.3 58.8 L373.4 58.4 L375.5 58.0 L377.5 57.6 L379.6 57.2 L381.7 56.8 L383.8 56.4 L385.9 56.0 L388.1 55.6 L390.2 55.2 L392.3 54.8 L394.5 54.4 L396.7 54.0 L398.8 53.6 L401.0 53.2 L403.2 52.8 L405.4 52.4 L407.6 52.0 L409.8 51.6 L412.0 51.2 L414.3 50.8 L416.5 50.4 L418.7 50.0 L421.0 49.6 L423.3 49.2 L425.5 48.8 L427.8 48.3 L430.1 47.9 L432.4 47.5" fill="none" stroke="#ff9770" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round"/><path d="M449.0 227.2 L447.0 226.8 L445.0 226.4 L443.0 226.0 L441.1 225.6 L439.1 225.2 L437.1 224.8 L435.2 224.4 L433.2 224.0 L431.3 223.6 L429.4 223.2 L427.5 222.8 L425.6 222.4 L423.7 222.0 L421.8 221.6 L420.0 221.2 L418.1 220.8 L416.3 220.4 L414.4 220.0 L412.6 219.6 L410.8 219.2 L409.0 218.8 L407.2 218.4 L405.4 218.0 L403.7 217.6 L401.9 217.2 L400.2 216.8 L398.4 216.4 L396.7 216.0 L395.0 215.6 L393.3 215.2 L391.6 214.8 L389.9 214.4 L388.3 214.0 L386.6 213.6 L384.9 213.2 L383.3 212.8 L381.7 212.4 L380.1 212.0 L378.5 211.6 L376.9 211.2 L375.3 210.8 L373.7 210.4 L372.2 210.0 L370.6 209.6 L369.1 209.2 L367.5 208.8 L366.0 208.4 L364.5 208.0 L363.0 207.6 L361.6 207.2 L360.1 206.8 L358.6 206.4 L357.2 206.0 L355.7 205.6 L354.3 205.2 L352.9 204.8 L351.5 204.4 L350.1 204.0 L348.7 203.6 L347.4 203.2 L346.0 202.8 L344.7 202.4 L343.4 202.0 L342.0 201.6 L340.7 201.2 L339.4 200.8 L338.2 200.4 L336.9 200.0 L335.6 199.6 L334.4 199.2 L333.1 198.8 L331.9 198.4 L330.7 198.0 L329.5 197.6 L328.3 197.2 L327.2 196.8 L326.0 196.4 L324.9 196.0 L323.7 195.6 L322.6 195.2 L321.5 194.8 L320.4 194.4 L319.3 194.0 L318.2 193.6 L317.2 193.2 L316.2 192.8 L315.1 192.4 L314.1 192.0 L313.1 191.6 L312.1 191.2 L311.1 190.8 L310.2 190.4 L309.2 190.0 L308.3 189.6 L307.4 189.2 L306.5 188.8 L305.6 188.4 L304.7 188.0 L303.8 187.6 L303.0 187.2 L302.2 186.8 L301.3 186.4 L300.5 186.0 L299.7 185.6 L299.0 185.2 L298.2 184.8 L297.5 184.4 L296.7 184.0 L296.0 183.6 L295.3 183.2 L294.7 182.8 L294.0 182.4 L293.3 182.0 L292.7 181.6 L292.1 181.2 L291.5 180.8 L290.9 180.4 L290.4 180.0 L289.8 179.6 L289.3 179.2 L288.8 178.8 L288.3 178.4 L287.9 178.0 L287.4 177.6 L287.0 177.2 L286.6 176.8 L286.2 176.4 L285.8 176.0 L285.5 175.6 L285.1 175.2 L284.8 174.8 L284.6 174.4 L284.3 174.0 L284.1 173.6 L283.9 173.2 L283.7 172.8 L283.5 172.4 L283.4 172.0 L283.3 171.6 L283.2 171.2 L283.1 170.8 L283.1 170.4 L283.1 170.0" fill="none" stroke="#ff9770" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round"/><path d="M283.1 170.0 L283.1 170.0 L283.1 169.6 L283.2 169.2 L283.3 168.8 L283.4 168.4 L283.5 168.0 L283.7 167.6 L283.9 167.2 L284.2 166.8 L284.5 166.4 L284.8 166.0 L285.2 165.6 L285.6 165.2 L286.1 164.8 L286.6 164.4 L287.1 164.0 L287.7 163.6 L288.3 163.2 L289.0 162.8 L289.8 162.4 L290.6 162.0 L291.4 161.6 L292.3 161.2 L293.3 160.8 L294.4 160.4 L295.5 160.0 L296.7 159.6 L298.0 159.2 L299.3 158.8 L300.7 158.4 L302.3 158.0 L303.9 157.6 L305.6 157.2 L307.5 156.8 L309.4 156.4 L311.5 156.0 L313.7 155.6 L316.1 155.2 L318.6 154.8 L321.3 154.4 L324.1 154.0 L327.1 153.6 L330.4 153.2 L333.9 152.8 L337.6 152.4 L341.6 152.0 L345.8 151.6 L350.4 151.2 L355.4 150.8 L360.7 150.4 L366.5 150.0 L372.7 149.6 L379.5 149.2 L386.9 148.8 L395.1 148.4 L404.0 148.0 L413.8 147.6 L424.6 147.2" fill="none" stroke="#5c6775" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="7 4"/><circle cx="283.1" cy="170.2" r="5.4" fill="#e8b04b" stroke="#e8b04b" stroke-width="1.4"/><text x="292.1" y="188.2" fill="#e8b04b" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">鞍结点</text><line x1="283.1" y1="170.2" x2="283.1" y2="177.1" stroke="rgba(232,176,75,.30)" stroke-width="1.0" stroke-dasharray="3 4"/><text x="64.1" y="55.8" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">浅虚线：h = 0 的完美叉式</text><text x="64.1" y="67.4" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">实线/虚线：h = 0.18，断成两支</text><text x="299.7" y="156.2" fill="#ff9770" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">μ &gt; μ_t 时两个稳定态并存</text><text x="50.0" y="300.0" fill="#5c6775" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">加一个常数项，叉子的柄就断了：留下一个鞍结点和一段「跳过去就回不来」的滞后窗口。</text></svg>
+<!--END:F-->
+          <div class="figcap">浅虚线是完美叉式（<em>h</em> = 0）。加一个常数项 <em>h</em> = 0.18 之后，叉子的柄断开了：一支贯穿全场，另一支变成 C 形，与它之间隔着一个鞍结点。</div>
+        </div>
+        <div>
+          <div class="a kicker">§3.6 · 不完美分岔与突变</div>
+          <h2 class="a">加一个常数项，叉子就断了</h2>
+          <p class="a p">真实的旋转环不可能绝对对称：重心偏一点、桌面不平一点。把这些统统塞进一个常数 <em>h</em>：</p>
+          <span class="a formula">ẋ = h + μx − x³</span>
+          <p class="a p">现在 <em>x</em> → −<em>x</em> 不再是对称操作（因为 <em>h</em> 不跟着变号），奇对称被破坏。后果不是"稍微挪一下"，而是<strong>拓扑上的改变</strong>：</p>
+          <p class="a p">· 原来看作"一个点分叉成三个"的地方，现在是<strong>两个彼此分开的鞍结分岔</strong>；<br>
+             · 中间隔着一段<strong>三个不动点（两个稳定、一个不稳定）并存</strong>的参数区间；<br>
+             · 在这段区间里，系统的终局取决于<strong>历史</strong>——它是从哪边过来的。</p>
+          <p class="a p"><em>h</em> 越小，断口越窄：当 <em>h</em> → 0，两个鞍结点重新贴近，叉式分岔恢复。<strong>完美的分岔是"余维 2"的（要同时满足两个条件），而现实中你只能设定一个参数——所以实验室里看到的几乎总是"不完美"的那个版本。</strong></p>
+          <p class="a p">这解释了为什么"突变"这个词会出现在这里：<em>μ</em> 慢慢拧，系统会在某一点<strong>突然跳</strong>到另一支上去（突变，catastrophe），而拧回来时它<strong>不跳回来</strong>。下一页算这段滞后。</p>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§3.6 不完美分岔与突变</div>
+  </section>
+
+  <!-- ========== 16 §3.6 滞后 ========== -->
+  <section class="page" data-title="跳过去，就回不来了">
+    <div class="page-inner">
+      <div class="a kicker">§3.6 · 突变与滞后</div>
+      <h2 class="a">跳过去，就回不来了</h2>
+      <p class="a p">拿 <em>ẋ</em> = <em>h</em> + <em>μx</em> − <em>x</em>³，固定 <em>h</em> = 0.18，把 <em>μ</em> 从很小的值慢慢加大，再慢慢减回来。会发生两件不对称的事。</p>
+      <div class="split" style="margin-top:16px">
+        <div class="a card" style="border-color:rgba(232,176,75,.32)">
+          <h4 style="color:#f3d79a">正向：μ 增大</h4>
+          <p>系统停在"靠上的那支"上（<em>x</em> &gt; 0，贯穿全场的那支）。它一路平稳地跟着移动，<strong>什么都不会发生</strong>——因为它一直存在、一直稳定。</p>
+        </div>
+        <div class="a card" style="border-color:rgba(255,151,112,.32)">
+          <h4 style="color:#ffc0a8">反向：μ 减小</h4>
+          <p>如果系统已经被推到 <em>x</em> &lt; 0 的那一支上，往回拧时它会在<strong>鞍结点</strong>处被消灭：两个不动点相撞，它无处可去，只能<strong>跳到</strong>上面那支去。这个跳变不可逆。</p>
+        </div>
+      </div>
+      <p class="a p" style="margin-top:18px">把"上去"和"下来"的跳变点画在同一张 <em>x</em>–<em>μ</em> 图上，就得到一个<strong>滞后环</strong>（hysteresis loop）：两条路径不重合，中间夹着双稳区。</p>
+      <p class="a p">三个必须记住的要点：</p>
+      <p class="a p">① <strong>滞后 = 双稳 + 两个鞍结。</strong>没有双稳就没有滞后；双稳的两个边界都是鞍结分岔。<br>
+         ② <strong>跳变点是可预测的</strong>：它就是鞍结点，条件 <em>f</em> = 0 且 <em>f′</em> = 0，解这两个方程即可。<br>
+         ③ <strong>噪声能提前"偷跑"</strong>：真实系统里，还没到鞍结点，随机扰动就可能把状态踢过中间的不稳定支。此时跳变的位置依赖噪声强度，不再由分岔图决定。</p>
+      <div class="a pull">第 8 章会看到，同一个滞后结构在<strong>受迫摆</strong>和<strong>约瑟夫森结</strong>上重演，只不过那里的双稳来自"同宿轨道"而不是鞍结。<cite>形状记住了，换系统就不慌。</cite></div>
+    </div>
+    <div class="pfoot">§3.6 不完美分岔与突变</div>
+  </section>
+
+  <!-- ========== 17 §3.7 昆虫爆发 ========== -->
+  <section class="page" data-title="昆虫爆发：直线与曲线谁高">
+    <div class="page-inner">
+      <div class="split">
+        <div>
+          <div class="a kicker">§3.7 · 昆虫爆发</div>
+          <h2 class="a">昆虫爆发：直线与曲线谁高</h2>
+          <p class="a p">云杉芽虫（spruce budworm）是北方针叶林的大害虫：多数年份几乎找不到，每隔若干年却会把整片林子吃秃。两种状态都稳定——这正是我们刚学过的双稳。</p>
+          <p class="a p">模型把两件事写在一起：<strong>自身增长</strong>按逻辑斯谛，<strong>被鸟吃掉</strong>的部分是饱和的（鸟吃饱了就吃不动，所以捕食率先升后降）：</p>
+          <span class="a formula">ẋ = rx(1 − x/K) − Bx²/(A² + x²)</span>
+          <p class="a p">求平衡时把 <em>x</em> 约掉（<em>x</em> = 0 永远是一个解），得</p>
+          <span class="a formula">r(1 − x/K) = Bx/(A² + x²)</span>
+          <p class="a p">左边是<strong>一条直线</strong>，右边是<strong>一条驼峰形的曲线</strong>。所以非零不动点＝两者的交点。<strong>图解法比求根公式更可靠</strong>：它一眼告出交点有几个、在哪儿。</p>
+      <p class="a p">别忘了 <em>x</em> = 0 本身也是不动点，而且 <em>f′</em>(0) = <em>r</em> &gt; 0，是<strong>不稳定</strong>的（种群很小时总是往上长）。所以一共 4 个不动点：0，加上图里数出来的 1 个或 3 个。下面说的"低密度支"指的是那个<strong>小的正根</strong>，不是 0。</p>
+        </div>
+        <div class="a fig">
+          <!--FIG:G-->
+<svg viewBox="0 0 480 320" role="img" aria-label="昆虫爆发的图解法：直线与曲线的交点"><line x1="52.0" y1="172.8" x2="448.0" y2="172.8" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="46.0" y="176.3" fill="#5c6775" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">0.2</text><line x1="52.0" y1="109.5" x2="448.0" y2="109.5" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="46.0" y="113.0" fill="#5c6775" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">0.4</text><line x1="52.0" y1="46.3" x2="448.0" y2="46.3" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="46.0" y="49.8" fill="#5c6775" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">0.6</text><line x1="114.9" y1="236.0" x2="114.9" y2="40.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="114.9" y="249.0" fill="#5c6775" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">2</text><line x1="177.7" y1="236.0" x2="177.7" y2="40.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="177.7" y="249.0" fill="#5c6775" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">4</text><line x1="240.6" y1="236.0" x2="240.6" y2="40.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="240.6" y="249.0" fill="#5c6775" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">6</text><line x1="303.4" y1="236.0" x2="303.4" y2="40.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="303.4" y="249.0" fill="#5c6775" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">8</text><line x1="366.3" y1="236.0" x2="366.3" y2="40.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="366.3" y="249.0" fill="#5c6775" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">10</text><line x1="429.1" y1="236.0" x2="429.1" y2="40.0" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="429.1" y="249.0" fill="#5c6775" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">12</text><line x1="52.0" y1="236.0" x2="452.0" y2="236.0" stroke="rgba(255,255,255,.22)" stroke-width="1.2"/><line x1="52.0" y1="236.0" x2="52.0" y2="36.0" stroke="rgba(255,255,255,.22)" stroke-width="1.2"/><text x="446.0" y="228.0" fill="#8b95a4" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">x（种群密度）</text><text x="44.0" y="42.0" fill="#8b95a4" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">y</text><path d="M52.0 236.0 L53.5 220.7 L55.0 205.6 L56.6 191.0 L58.1 176.9 L59.6 163.6 L61.1 151.2 L62.7 139.8 L64.2 129.5 L65.7 120.2 L67.2 111.9 L68.8 104.8 L70.3 98.6 L71.8 93.4 L73.3 89.1 L74.8 85.6 L76.4 82.9 L77.9 80.9 L79.4 79.4 L80.9 78.5 L82.5 78.0 L84.0 78.0 L85.5 78.3 L87.0 78.9 L88.6 79.7 L90.1 80.8 L91.6 82.1 L93.1 83.5 L94.6 85.0 L96.2 86.7 L97.7 88.4 L99.2 90.2 L100.7 92.0 L102.3 93.9 L103.8 95.8 L105.3 97.7 L106.8 99.6 L108.4 101.5 L109.9 103.4 L111.4 105.3 L112.9 107.2 L114.4 109.1 L116.0 110.9 L117.5 112.7 L119.0 114.5 L120.5 116.2 L122.1 117.9 L123.6 119.6 L125.1 121.3 L126.6 122.9 L128.2 124.5 L129.7 126.1 L131.2 127.6 L132.7 129.1 L134.2 130.6 L135.8 132.0 L137.3 133.4 L138.8 134.8 L140.3 136.2 L141.9 137.5 L143.4 138.8 L144.9 140.0 L146.4 141.3 L148.0 142.5 L149.5 143.7 L151.0 144.8 L152.5 146.0 L154.0 147.1 L155.6 148.2 L157.1 149.2 L158.6 150.3 L160.1 151.3 L161.7 152.3 L163.2 153.3 L164.7 154.2 L166.2 155.1 L167.8 156.1 L169.3 157.0 L170.8 157.8 L172.3 158.7 L173.8 159.5 L175.4 160.4 L176.9 161.2 L178.4 162.0 L179.9 162.8 L181.5 163.5 L183.0 164.3 L184.5 165.0 L186.0 165.7 L187.6 166.4 L189.1 167.1 L190.6 167.8 L192.1 168.5 L193.6 169.1 L195.2 169.8 L196.7 170.4 L198.2 171.0 L199.7 171.7 L201.3 172.3 L202.8 172.9 L204.3 173.4 L205.8 174.0 L207.4 174.6 L208.9 175.1 L210.4 175.7 L211.9 176.2 L213.4 176.7 L215.0 177.2 L216.5 177.7 L218.0 178.2 L219.5 178.7 L221.1 179.2 L222.6 179.7 L224.1 180.1 L225.6 180.6 L227.2 181.0 L228.7 181.5 L230.2 181.9 L231.7 182.4 L233.2 182.8 L234.8 183.2 L236.3 183.6 L237.8 184.0 L239.3 184.4 L240.9 184.8 L242.4 185.2 L243.9 185.6 L245.4 186.0 L247.0 186.3 L248.5 186.7 L250.0 187.1 L251.5 187.4 L253.0 187.8 L254.6 188.1 L256.1 188.4 L257.6 188.8 L259.1 189.1 L260.7 189.4 L262.2 189.8 L263.7 190.1 L265.2 190.4 L266.8 190.7 L268.3 191.0 L269.8 191.3 L271.3 191.6 L272.8 191.9 L274.4 192.2 L275.9 192.5 L277.4 192.8 L278.9 193.0 L280.5 193.3 L282.0 193.6 L283.5 193.9 L285.0 194.1 L286.6 194.4 L288.1 194.6 L289.6 194.9 L291.1 195.2 L292.6 195.4 L294.2 195.7 L295.7 195.9 L297.2 196.1 L298.7 196.4 L300.3 196.6 L301.8 196.8 L303.3 197.1 L304.8 197.3 L306.4 197.5 L307.9 197.7 L309.4 198.0 L310.9 198.2 L312.4 198.4 L314.0 198.6 L315.5 198.8 L317.0 199.0 L318.5 199.2 L320.1 199.4 L321.6 199.6 L323.1 199.8 L324.6 200.0 L326.2 200.2 L327.7 200.4 L329.2 200.6 L330.7 200.8 L332.2 201.0 L333.8 201.2 L335.3 201.4 L336.8 201.5 L338.3 201.7 L339.9 201.9 L341.4 202.1 L342.9 202.2 L344.4 202.4 L346.0 202.6 L347.5 202.8 L349.0 202.9 L350.5 203.1 L352.0 203.2 L353.6 203.4 L355.1 203.6 L356.6 203.7 L358.1 203.9 L359.7 204.0 L361.2 204.2 L362.7 204.3 L364.2 204.5 L365.8 204.6 L367.3 204.8 L368.8 204.9 L370.3 205.1 L371.8 205.2 L373.4 205.4 L374.9 205.5 L376.4 205.7 L377.9 205.8 L379.5 205.9 L381.0 206.1 L382.5 206.2 L384.0 206.3 L385.6 206.5 L387.1 206.6 L388.6 206.7 L390.1 206.9 L391.6 207.0 L393.2 207.1 L394.7 207.2 L396.2 207.4 L397.7 207.5 L399.3 207.6 L400.8 207.7 L402.3 207.9 L403.8 208.0 L405.4 208.1 L406.9 208.2 L408.4 208.3 L409.9 208.5 L411.4 208.6 L413.0 208.7 L414.5 208.8 L416.0 208.9 L417.5 209.0 L419.1 209.1 L420.6 209.2 L422.1 209.3 L423.6 209.5 L425.2 209.6 L426.7 209.7 L428.2 209.8 L429.7 209.9 L431.2 210.0 L432.8 210.1 L434.3 210.2 L435.8 210.3 L437.3 210.4 L438.9 210.5 L440.4 210.6 L441.9 210.7 L443.4 210.8 L445.0 210.9 L446.5 211.0 L448.0 211.1" fill="none" stroke="#4fbfa8" stroke-width="2.0" stroke-linejoin="round" stroke-linecap="round"/><text x="88.1" y="57.4" fill="#4fbfa8" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">人均被捕食率 x/(1+x²)</text><path d="M52.0 109.5 L209.1 236.0" fill="none" stroke="#5c6775" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="6 4"/><text x="203.1" y="250.0" fill="#5c6775" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">K = 5</text><circle cx="65.6" cy="120.5" r="4.2" fill="#5c6775" stroke="#5c6775" stroke-width="1.2"/><path d="M52.0 109.5 L443.3 222.0" fill="none" stroke="#e8b04b" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/><text x="437.3" y="236.0" fill="#e8b04b" font-size="9.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="end">K = 14</text><circle cx="66.9" cy="113.8" r="4.2" fill="#e8b04b" stroke="#e8b04b" stroke-width="1.2"/><circle cx="138.3" cy="134.3" r="4.0" fill="#080b10" stroke="#5c6775" stroke-width="1.5"/><circle cx="390.8" cy="206.9" r="4.2" fill="#e8b04b" stroke="#e8b04b" stroke-width="1.2"/><text x="52.0" y="292.0" fill="#5c6775" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="start">直线 = 净增长率 r(1−x/K)，曲线 = 被吃掉的比例。交点个数就是不动点个数。</text></svg>
+<!--END:G-->
+          <div class="figcap">取 <em>r</em> = 0.4、<em>A</em> = <em>B</em> = 1（无量纲）。<em>K</em> = 5 时直线从驼峰上方过，只有一个交点；<em>K</em> = 14 时直线切进驼峰，交点变成三个（实心＝稳定，空心＝不稳定）。</div>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§3.7 昆虫爆发</div>
+  </section>
+
+  <!-- ========== 18 §3.7 双稳与参数空间 ========== -->
+  <section class="page" data-title="阈值在中间，两个世界在两边">
+    <div class="page-inner">
+      <div class="a kicker">§3.7 · 两个鞍结</div>
+      <h2 class="a">阈值在中间，两个世界在两边</h2>
+      <p class="a p">三个交点按大小排开，命运依次是：<strong>稳定 → 不稳定 → 稳定</strong>。它们各有名字：</p>
+      <div class="split" style="margin-top:14px">
+        <div class="a card" style="border-color:rgba(79,191,168,.30)">
+          <h4 style="color:#a9e6d8">低密度支（小根）</h4>
+          <p>虫子藏在树缝里，鸟吃得干净。稳定。<br>这就是"看不出有虫"的那些年。</p>
+        </div>
+        <div class="a card" style="border-color:rgba(139,149,164,.40)">
+          <h4>阈值支（中间根）</h4>
+          <p>不稳定。<strong>它不是能待住的状态，而是一条分界线</strong>：虫口超过它，鸟吃不完，森林就失控。</p>
+        </div>
+        <div class="a card" style="border-color:rgba(255,151,112,.32)">
+          <h4 style="color:#ffc0a8">爆发支（大根）</h4>
+          <p>稳定。树木被吃光后食物变少，虫口自己回落一点，但仍停在高位。</p>
+        </div>
+      </div>
+      <p class="a p" style="margin-top:16px">交点从 1 个变成 3 个，只需<strong>一次</strong>切触：直线与驼峰相切的那一瞬（<em>r</em> = 0.4 时在 <em>K</em> ≈ 9.56），<strong>一对不动点同时出生</strong>。<br><strong>口径要收窄</strong>：本节固定 <em>r</em> = 0.4、只扫 <em>K</em>，所以整条 <em>K</em> 轴上只有<strong>一个</strong>鞍结。升 <em>K</em> 时中根与大根一起出生；降 <em>K</em> 时它们又在同一点一起湮灭——<strong>升 <em>K</em> 时系统一路停在低支</strong>（新生的爆发支不会自动接管），<strong>降 <em>K</em> 时一路停在爆发支，直到 <em>K</em> ≈ 9.56 两根湮灭才跳回低支</strong>。滞后仍然成立，但它只由这一个鞍结束缚。<br>要真的看到<strong>两个</strong>鞍结，得固定 <em>K</em>（取在 cusp 之上，例如 <em>K</em> = 8）改扫 <em>r</em>：那才会先后穿过两条分岔曲线，形成完整的滞后环。这两条曲线在 (<em>r</em>, <em>K</em>) 平面上合成一个<strong>尖点</strong>（cusp），只有尖点张开的那片区域内才有三个不动点。这就是突变理论里最基础的"尖点突变"。</p>
+      <p class="a p">三个必须带上的条件：① 捕食必须<strong>饱和</strong>（没有驼峰就没有双稳）；② 空间必须<strong>均匀</strong>（真实林子有斑块，虫口可以在局部先爆）；③ 没有<strong>噪声</strong>（风、寒潮、病害；真实爆发往往由噪声"点火"，分岔图只说明"点着了就能烧"）。</p>
+      <p class="a p">顺带回收 §3.6：这里的双稳与滞后，和旋转环上的不完美分岔是<strong>同一个几何</strong>——中间夹一支不稳定，两边各一支稳定。</p>
+    </div>
+    <div class="pfoot">§3.7 昆虫爆发</div>
+  </section>
+
+  <!-- ========== 19 推导 1 · 鞍结的普适性 ========== -->
+  <section class="page" data-title="完整推导 · 为什么所有鞍结都长一个样">
+    <div class="page-inner">
+      <div class="a kicker">PROOF 01 · 完整推导</div>
+      <h2 class="a">为什么所有鞍结都长 <em>μ</em> − <em>x</em>² 那个样</h2>
+      <details class="a" open style="margin-top:16px">
+        <summary><span class="tag blue">完整推导</span>规范形定理的构造性证明 + 退化自检 + 边界</summary>
+        <div class="body proofs">
+          <p><b>要证．</b>设 <em>f(x,μ)</em> 光滑，在 <em>(x*, μ_c)</em> 处<br>
+             <em>f</em> = 0（是平衡点）、<em>∂f</em>/<em>∂x</em> = 0（线性判据失效）、<em>∂f</em>/<em>∂μ</em> ≠ 0、<em>∂²f</em>/<em>∂x²</em> ≠ 0。<br>
+             则存在局部的光滑坐标变换，把方程化成 <em>ẏ</em> = <em>μ̂</em> − <em>y</em>²（或 <em>μ̂</em> + <em>y</em>²，两者差一次时间反演）。</p>
+          <p><span class="stepnum">1</span><b>平移．</b>令 <em>x</em> = <em>x*</em> + <em>u</em>、<em>μ</em> = <em>μ_c</em> + <em>ν</em>。因为 <em>ẋ</em> = <em>u̇</em>，在 <em>(0,0)</em> 处展开：</p>
+          <span class="formula">u̇ = a ν + b u² + O(u³, u²ν, uν²)</span>
+          <p>其中 <em>a</em> = <em>∂f</em>/<em>∂μ</em> ≠ 0、<em>b</em> = ½<em>∂²f</em>/<em>∂x²</em> ≠ 0。<strong>一次项 <em>u</em> 的系数是 <em>∂f</em>/<em>∂x</em>，按假设为 0，所以第一项就是二次项</strong>——这一步是整个定理的心脏。</p>
+          <p><span class="stepnum">2</span><b>标度．</b>令 <em>u</em> = <em>αy</em>、<em>ν</em> = <em>βμ̂</em>，代入并除以 <em>α</em>：</p>
+          <span class="formula">ẏ = (aβ/α) μ̂ + (bα) y² + 高阶</span>
+          <p>取 <em>α</em> = 1/|<em>b</em>|，则 <em>bα</em> = ±1；再取 <em>β</em> = <em>α</em>/|<em>a</em>|，则 <em>aβ/α</em> = ±1。合法，因为 <em>a</em>、<em>b</em> 都不为零，除法可用。</p>
+          <p><span class="stepnum">3</span><b>定符号．</b>得到的方程是 ẏ = <em>σ</em>₁<em>μ̂</em> + <em>σ</em>₂<em>y</em>²。把 <em>μ̂</em> 重新定义成 <em>σ</em>₁<em>μ̂</em>，两种情形只剩 ẏ = <em>μ̂</em> ± <em>y</em>²。而 ẏ = <em>μ̂</em> + <em>y</em>² 换 <em>t</em> → −<em>t</em> 并翻 <em>μ̂</em> 的号就是 ẏ = <em>μ̂</em> − <em>y</em>²。<strong>所以在"差一个时间反演"的意义下只有一种鞍结。</strong></p>
+          <p><b>退化自检．</b>取 <em>f</em> = <em>μ</em> − <em>x</em>²：<em>a</em> = 1、<em>b</em> = −1，第 2 步给出 ẏ = <em>μ̂</em> − <em>y</em>²，即规范形本身 ✓（变换是恒等变换的那一次）。再取 <em>f</em> = <em>μ</em> − <em>x</em>⁴：<em>∂²f</em>/<em>∂x²</em> = 0，第 2 步的 <em>α</em> 取不出来，定理不适用；实际分支是 <em>x*</em> = ±<em>μ</em><sup>1/4</sup>，<strong>指数从 1/2 变成 1/4</strong>。这说明"<em>∂²f</em>/<em>∂x²</em> ≠ 0"不是技术性小条件，它决定了标度指数的值。</p>
+          <p><b>为什么它解释了"竖直切线"．</b>由隐函数定理，只要 <em>∂f</em>/<em>∂x</em> ≠ 0，分支 <em>x*</em>(<em>μ</em>) 就光滑；<strong>分岔点恰是隐函数定理失效的地方</strong>（<em>∂f</em>/<em>∂x</em> = 0），于是曲线在那里允许出现两支、允许竖直。</p>
+          <p><b>失效边界．</b>① <em>∂²f</em>/<em>∂x²</em> = 0：更高阶退化，指数变 1/4 或更怪；② <em>∂f</em>/<em>∂μ</em> = 0：拧参数的这条方向恰好切于 <em>f</em> 的等值线，看不到分岔（需要两个参数才能打开）；③ <em>f</em> 不光滑（如 |<em>x</em>|）：展不开；④ 二维以上，先要沿"中心流形"约化成一维，本定理才接得上——那是第 8 章的话。</p>
+        </div>
+      </details>
+    </div>
+    <div class="pfoot">§3.1 鞍-结分岔</div>
+  </section>
+
+  <!-- ========== 20 推导 2 · 叉式的 √ 标度 ========== -->
+  <section class="page" data-title="完整推导 · 对称性给出的 √ 标度">
+    <div class="page-inner">
+      <div class="a kicker">PROOF 02 · 完整推导</div>
+      <h2 class="a">对称性怎么逼出一对分支，还逼出 1/2</h2>
+      <details class="a" open style="margin-top:16px">
+        <summary><span class="tag blue">完整推导</span>奇对称 → 只有奇次项 → 分支位置与指数</summary>
+        <div class="body proofs">
+          <p><b>出发点．</b>设 <em>ẋ</em> = <em>f(x,μ)</em>，<em>f</em> 光滑且<strong>奇对称</strong>：<em>f</em>(−<em>x</em>,<em>μ</em>) = −<em>f</em>(<em>x</em>,<em>μ</em>)，对一切 <em>μ</em> 成立。（旋转环在 <em>h</em> = 0 时、对称鞍座、对称电路都满足它。）</p>
+          <p><span class="stepnum">1</span><b>只有奇次项．</b>把 <em>f</em> 在 <em>x</em> = 0 处展开成幂级数。奇对称意味着偶次系数全为零（否则把 <em>x</em> 换成 −<em>x</em> 会多出符号不同的项）：</p>
+          <span class="formula">f = a(μ) x + b(μ) x³ + O(x⁵)</span>
+          <p>顺带得到一个免费结论：<em>f</em>(0,<em>μ</em>) = 0，<strong>所以 <em>x*</em> = 0 对一切 μ 都是不动点</strong>。它不可能"生出来"或"死掉"，只可能失稳。</p>
+          <p><span class="stepnum">2</span><b>分支位置．</b>非零不动点由 <em>a</em>(<em>μ</em>) + <em>b</em>(<em>μ</em>)<em>x</em>² = 0 给出：</p>
+          <span class="formula">x* = ±√( −a(μ)/b(μ) )</span>
+          <p>实数解要求 <em>a</em>/<em>b</em> &lt; 0。设 <em>a</em>(<em>μ_c</em>) = 0 且 <em>a</em>′(<em>μ_c</em>) = <em>A</em> ≠ 0、<em>b</em>(<em>μ_c</em>) = <em>B</em> ≠ 0，则在 <em>μ_c</em> 附近 −<em>a</em>/<em>b</em> ≈ −<em>A</em>(<em>μ</em>−<em>μ_c</em>)/<em>B</em>，符号由 (<em>μ</em>−<em>μ_c</em>) 与 −<em>A</em>/<em>B</em> 决定。</p>
+          <p><span class="stepnum">3</span><b>稳定性与指数．</b><em>λ</em>(<em>x</em>) = <em>∂f</em>/<em>∂x</em> = <em>a</em> + 3<em>bx</em>²。<br>
+             · 在 0 处：<em>λ</em> = <em>a</em>(<em>μ</em>)，恰在 <em>μ_c</em> 过零——<strong>分岔点就是线性判据失效点</strong>。<br>
+             · 在非零支：<em>λ</em> = <em>a</em> + 3<em>b</em>(−<em>a</em>/<em>b</em>) = −2<em>a</em>，与 <em>a</em> 反号。<br>
+             所以当 <em>B</em> &lt; 0、<em>A</em> &gt; 0（超临界）时，<em>μ</em> &gt; <em>μ_c</em> 上 0 不稳、±√(−<em>a</em>/<em>b</em>) 稳定。振幅：</p>
+          <span class="formula">|x*| = √( A(μ−μ_c)/|B| ) ∝ (μ−μ_c)^{1/2}</span>
+          <p><b>退化自检．</b>取 <em>a</em> = <em>μ</em>、<em>b</em> = −1（正是 <em>ẋ</em> = <em>μx</em> − <em>x</em>³）：<em>x*</em> = ±√<em>μ</em> ✓。再把 <em>μ</em> 固定在 1：<em>x*</em> = ±1，与第 2 章 <em>ẋ</em> = <em>x</em> − <em>x</em>³ 的三个零点完全一致 ✓。取 <em>b</em> = 0：<em>ẋ</em> = <em>μx</em> − <em>x</em>⁵，同样手法给出 <em>x*</em> ∝ <em>μ</em><sup>1/4</sup>，<strong>指数变了</strong>——和鞍结那里一模一样。</p>
+          <p><b>失效边界．</b>① 奇对称是硬前提：加一个常数 <em>h</em> 就破坏它，叉子断成"一支 + 一个 C 形"（§3.6）；② 只在此点附近成立，远处的高阶项会改写分支形状；③ 若 <em>B</em> &gt; 0（亚临界），非零支出现在 <em>μ</em> &lt; <em>μ_c</em> 且<strong>不稳定</strong>，系统会在 <em>μ_c</em> 处跳变——这是滞后与"硬激发"的来源，第 8 章 Hopf 分岔同构。</p>
+        </div>
+      </details>
+    </div>
+    <div class="pfoot">§3.4 叉式分岔</div>
+  </section>
+
+  <!-- ========== 21 自测 ========== -->
+  <section class="page" data-title="自测 · 五道题">
+    <div class="page-inner">
+      <div class="a kicker">CHECK · 自测</div>
+      <h2 class="a" style="margin-bottom:14px">五道题：先判断形状，再算数</h2>
+      <div class="qs" id="quizbox"></div>
+      <div class="score" id="score"></div>
+      <label class="a done" id="donebox">
+        <input type="checkbox" id="doneChk">
+        <span>这一章读完了</span>
+      </label>
+    </div>
+    <div class="pfoot">—</div>
+  </section>
+
+  <!-- ========== 22 带走 ========== -->
+  <section class="page" data-title="带走 · 三张图就是字典">
+    <div class="page-inner">
+      <div class="a kicker">TAKEAWAY · 带走</div>
+      <h2 class="a">三张图就是字典</h2>
+      <div class="split" style="margin-top:16px">
+        <div>
+          <p class="a p"><strong>鞍结（<em>μ</em>−<em>x</em>²）：</strong>一对不动点相撞后湮灭。签名：个数 0↔2，切触处 <em>f</em>=<em>f′</em>=0，分支竖直，<em>x*</em> ∝ ±√(<em>μ</em>−<em>μ_c</em>)。</p>
+          <p class="a p"><strong>跨临界（<em>μx</em>−<em>x</em>²）：</strong>零点从不消失，只交换稳定性。签名：能写成 <em>x</em>·<em>g</em>(<em>x</em>,<em>μ</em>)，且 <em>g</em>(0,<em>μ_c</em>)=0。激光阈值就是它。</p>
+          <p class="a p"><strong>叉式（<em>μx</em>−<em>x</em>³）：</strong>一支分裂为三支，两支对称。签名：方程在 <em>x</em>→−<em>x</em> 下不变，振幅 ∝ √(<em>μ</em>−<em>μ_c</em>)。</p>
+          <div class="a pull">但这三张图都是"理想对称"的。真实系统只要加一个常数项，叉子就断成<strong>两个鞍结 + 一段滞后</strong>。<cite>所以分岔图要当字典用，不当预言用：先认形状，再问"哪个不完美条件把它掰弯了"。</cite></div>
+        </div>
+        <div>
+          <div class="a card" style="border-color:rgba(217,83,74,.30)">
+            <h4 style="color:#ffb4a6">两个常见误读</h4>
+            <p><strong>误读一：</strong>把分岔图当时间史。它上面没有时间——横轴是参数，不是 <em>t</em>。<br>
+               <strong>误读二：</strong>以为"过了分岔点旧状态就没了"。错：它只是<strong>失稳</strong>，物理上常常还能短暂停留（滞后、亚临界跃迁都靠这个）。</p>
+          </div>
+          <div class="a card" style="margin-top:14px;border-color:rgba(98,208,255,.28)">
+            <h4 style="color:#bfe6ff">下一章的开头</h4>
+            <p>这一章的一切都建立在"状态是一个实数"上。把状态变成<strong>一个角度</strong>，线的两端就接上了——接成圆。<br>圆上没有"零点之间只有一种流向"这回事了，于是系统第一次<strong>可以转起来</strong>。→ 第 4 章 · 圆上的流</p>
+          </div>
+          <div class="a chips" style="margin-top:18px"><span>§3.1 鞍结</span><span>§3.2 跨临界</span><span>§3.3 激光</span><span>§3.4 叉式</span><span>§3.5 旋转环</span><span>§3.6 不完美</span><span>§3.7 昆虫爆发</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">—</div>
+  </section>
+
+  <!-- ========== end of pages ========== -->
+
+</main>
+
+<script>
+(function(){
+"use strict";
+var $=function(s,r){return (r||document).querySelector(s);};
+var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s));};
+var REDUCE=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+var C={text:"#8b95a4",gold:"#e8b04b",cyan:"#62d0ff",warm:"#ff9770",teal:"#4fbfa8",grid:"rgba(255,255,255,.06)"};
+
+/* ================= 翻页 ================= */
+var pages=$$(".page"), dotsBox=$("#dots"), rail=$("#rail"),
+    counter=$("#counter"), whereEl=$("#where"), tip=$("#tip");
+var idx=0, steps=[], lock=false;
+
+pages.forEach(function(p,i){
+  steps[i]=0;
+  var b=document.createElement("button");
+  b.setAttribute("aria-label","第 "+(i+1)+" 页");
+  b.innerHTML='<i></i>';
+  b.addEventListener("click",function(){ go(i); });
+  dotsBox.appendChild(b);
+});
+var dotEls=$$("#dots button");
+
+function setStep(pi,s){
+  steps[pi]=s;
+  var page=pages[pi];
+  $$(".step",page).forEach(function(el,k){ el.classList.toggle("on",k===s); });
+  $$(".sdots i",page).forEach(function(el,k){ el.classList.toggle("on",k===s); });
+  var hook=page.getAttribute("data-hook");
+  if(hook==="flow"&&window.NDC1) window.NDC1.pick(s);
+  if(hook==="pend"&&window.NDC2) window.NDC2.setGamma([0,0.22,0.75][s]);
+  if(hook==="lorenz"&&window.NDC4) window.NDC4.setDelta([1e-2,1e-5,1e-9][s]);
+}
+function paint(){
+  for(var i=0;i<pages.length;i++) pages[i].classList.toggle("on",i===idx);
+  for(var k=0;k<dotEls.length;k++) dotEls[k].classList.toggle("on",k===idx);
+  rail.style.width=(((idx+1)/pages.length)*100).toFixed(2)+"%";
+  counter.innerHTML="<b>"+String(idx+1).padStart(2,"0")+"</b> / "+pages.length;
+  whereEl.innerHTML="<b>"+(pages[idx].getAttribute("data-title")||"")+"</b>";
+}
+function go(i){
+  if(i<0||i>=pages.length) return;
+  idx=i;
+  var inner=$(".page-inner",pages[idx]);
+  if(inner) inner.scrollTop=0;
+  if(window.__FITS) window.__FITS.forEach(function(fn){ try{ fn(); }catch(e){} });
+  paint();
+  setStep(idx,0);
+  if(idx>0) tip.classList.add("hide");
+}
+function next(){
+  var p=pages[idx], n=parseInt(p.getAttribute("data-steps")||"0",10), s=steps[idx]||0;
+  if(n>0&&s<n-1){ setStep(idx,s+1); return; }
+  if(idx<pages.length-1) go(idx+1);
+}
+function prev(){
+  var p=pages[idx], n=parseInt(p.getAttribute("data-steps")||"0",10), s=steps[idx]||0;
+  if(n>0&&s>0){ setStep(idx,s-1); return; }
+  if(idx>0) go(idx-1);
+}
+function innerEdge(dir){
+  var inner=pages[idx]&&$(".page-inner",pages[idx]);
+  if(!inner||inner.scrollHeight<=inner.clientHeight+4) return true;
+  if(dir>0) return inner.scrollTop+inner.clientHeight>=inner.scrollHeight-6;
+  return inner.scrollTop<=3;
+}
+paint(); setStep(0,0);
+
+window.addEventListener("wheel",function(e){
+  if(lock) return;
+  if(Math.abs(e.deltaY)<8) return;
+  var dir=e.deltaY>0?1:-1;
+  if(!innerEdge(dir)) return;
+  lock=true;
+  if(dir>0) next(); else prev();
+  window.setTimeout(function(){ lock=false; }, 620);
+},{passive:true});
+
+window.addEventListener("keydown",function(e){
+  var k=e.key;
+  if(k==="ArrowDown"||k==="ArrowRight"||k===" "||k==="PageDown"||k==="Enter"){ e.preventDefault(); next(); }
+  else if(k==="ArrowUp"||k==="ArrowLeft"||k==="PageUp"){ e.preventDefault(); prev(); }
+  else if(k==="Home"){ e.preventDefault(); go(0); }
+  else if(k==="End"){ e.preventDefault(); go(pages.length-1); }
+});
+
+var ty=null;
+window.addEventListener("touchstart",function(e){ ty=e.touches[0].clientY; },{passive:true});
+window.addEventListener("touchend",function(e){
+  if(ty===null) return;
+  var dy=ty-e.changedTouches[0].clientY;
+  if(Math.abs(dy)>46){ dy>0?next():prev(); }
+  ty=null;
+},{passive:true});
+
+/* ================= 画布工具 ================= */
+function makeCanvas(cv){
+  var ctx=cv.getContext("2d");
+  var dpr=Math.min(window.devicePixelRatio||1,2);
+  var h0=parseInt(cv.getAttribute("height"),10)||330;
+  var w=cv.clientWidth||600, h=h0;
+  function fit(){
+    w=cv.clientWidth||600;
+    cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
+    cv.style.height=h+"px";
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  fit(); window.addEventListener("resize",fit);
+  window.__FITS=window.__FITS||[]; window.__FITS.push(fit);
+  return {ctx:ctx,fit:fit,w:function(){return w;},h:function(){return h;}};
+}
+function loop(cv,fn){
+  function tick(){
+    try{
+      var pg=cv.closest(".page");
+      if(!pg||pg.classList.contains("on")) fn();
+    }catch(e){ /* 单帧出错不中断动画循环 */ }
+    window.requestAnimationFrame(tick);
+  }
+  window.requestAnimationFrame(tick);
+}
+function tip(ctx,txt,x,y,color,size,align){
+  ctx.fillStyle=color||C.text;
+  ctx.font=(size||11)+'px "PingFang SC","Microsoft YaHei",sans-serif';
+  ctx.textAlign=align||"left";
+  ctx.fillText(txt,x,y);
+}
+
+
+/* ================= 演示 01 · 分岔实验室 ================= */
+(function(){
+  var cv=$("#cv1"); if(!cv) return;
+  var U=makeCanvas(cv), ctx=U.ctx;
+  var SYS=[
+    {n:"ẋ = μ − x²", f:function(v,m){ return m-v*v; }, mu0:0.50, x0:0.10, tag:"鞍结"},
+    {n:"ẋ = μx − x²", f:function(v,m){ return m*v-v*v; }, mu0:0.60, x0:0.18, tag:"跨临界"},
+    {n:"ẋ = μx − x³", f:function(v,m){ return m*v-v*v*v; }, mu0:0.70, x0:0.30, tag:"叉式"}
+  ];
+  var si=0, mu=0.5, x=0.1, tt=0, diagram=[], status="流动中";
+  var XR0=-1.55, XR1=1.55, MR0=-1, MR1=1;
+  function Ft(v,m){ return SYS[si].f(v,m); }
+  function F(v){ return SYS[si].f(v,mu); }
+  function setP(v){ var sl=$("#p1"), sv=$("#p1v"); if(sl) sl.value=v; if(sv) sv.textContent=(+v).toFixed(2); }
+  function rootsFor(m){
+    var out=[], i, a, b, fa, fb, k, mm, fm, N=170;
+    for(i=1;i<=N;i++){
+      a=XR0+(XR1-XR0)*(i-1)/N; b=XR0+(XR1-XR0)*i/N;
+      fa=Ft(a,m); fb=Ft(b,m);
+      if(fa*fb<0){
+        for(k=0;k<46;k++){
+          mm=(a+b)/2; fm=Ft(mm,m);
+          if(fa*fm<=0){ b=mm; fb=fm; } else { a=mm; fa=fm; }
+        }
+        out.push((a+b)/2);
+      }
+    }
+    return out;
+  }
+  function buildDiagram(){
+    diagram=[];
+    var i, j, m, rs, d;
+    for(i=0;i<=110;i++){
+      m=MR0+(MR1-MR0)*i/110;
+      rs=rootsFor(m);
+      for(j=0;j<rs.length;j++){
+        d=(Ft(rs[j]+2e-4,m)-Ft(rs[j]-2e-4,m))/4e-4;
+        diagram.push([m, rs[j], d<0]);
+      }
+    }
+  }
+  function restart(v){
+    if(v!==undefined) x=v;
+    tt=0; status="流动中";
+  }
+  function rk(){
+    var dt=0.018, k1=F(x), k2=F(x+dt/2*k1), k3=F(x+dt/2*k2), k4=F(x+dt*k3);
+    x=x+dt/6*(k1+2*k2+2*k3+k4); tt+=dt;
+    if(x<XR0||x>XR1){ status="跑出画面"; restart(SYS[si].x0); }
+    else if(Math.abs(F(x))<3e-4){ status="已停住"; }
+    else { status="流动中"; }
+  }
+  function draw(){
+    var w=U.w(), h=U.h(), i, g;
+    ctx.clearRect(0,0,w,h);
+    var padL=34, padR=12, top=14, fBot=Math.round(h*0.34), NY=Math.round(h*0.40),
+        dTop=Math.round(h*0.50), dBot=h-26;
+    var X=function(v){ return padL+(v-XR0)/(XR1-XR0)*(w-padL-padR); };
+    var dX=function(m){ return padL+(m-MR0)/(MR1-MR0)*(w-padL-padR); };
+    var dY=function(v){ return dBot-(v-XR0)/(XR1-XR0)*(dBot-dTop); };
+    var lo=1e9, hi=-1e9, q;
+    for(i=0;i<=120;i++){ q=F(XR0+(XR1-XR0)*i/120); if(q<lo) lo=q; if(q>hi) hi=q; }
+    var pd=(hi-lo)*0.12+1e-6; lo-=pd; hi+=pd;
+    var fY=function(v){ return fBot-(v-lo)/(hi-lo)*(fBot-top); };
+    // 相图骨架
+    ctx.strokeStyle=C.grid; ctx.lineWidth=1;
+    for(g=-1;g<=1;g++){ ctx.beginPath(); ctx.moveTo(X(g),top); ctx.lineTo(X(g),NY+26); ctx.stroke(); }
+    ctx.strokeStyle="rgba(255,255,255,.20)";
+    ctx.beginPath(); ctx.moveTo(padL,fY(0)); ctx.lineTo(w-padR,fY(0)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(X(0),top); ctx.lineTo(X(0),NY+26); ctx.stroke();
+    ctx.beginPath();
+    for(i=0;i<=240;i++){ q=XR0+(XR1-XR0)*i/240; if(i) ctx.lineTo(X(q),fY(F(q))); else ctx.moveTo(X(q),fY(F(q))); }
+    ctx.strokeStyle=C.gold; ctx.lineWidth=2; ctx.lineJoin="round"; ctx.stroke();
+    tip(ctx,SYS[si].n,padL+2,top+2,C.gold,11.5);
+    tip(ctx,"μ = "+mu.toFixed(2),w-padR-4,top+2,C.text,10.5,"right");
+    // 零点
+    var rs=rootsFor(mu);
+    for(i=0;i<rs.length;i++){
+      var sl=(F(rs[i]+2e-4)-F(rs[i]-2e-4))/4e-4;
+      ctx.beginPath(); ctx.arc(X(rs[i]),NY,5.0,0,Math.PI*2);
+      ctx.fillStyle=(sl<0)?C.warm:"#080b10";
+      ctx.strokeStyle=(Math.abs(sl)<3e-3)?C.gold:((sl<0)?C.warm:"#5c6775");
+      ctx.lineWidth=1.6; ctx.fill(); ctx.stroke();
+    }
+    // 数轴与箭头
+    ctx.strokeStyle="rgba(139,149,164,.5)"; ctx.lineWidth=1.2;
+    ctx.beginPath(); ctx.moveTo(padL,NY+8); ctx.lineTo(w-padR,NY+8); ctx.stroke();
+    for(i=0;i<=24;i++){
+      q=XR0+(XR1-XR0)*i/24;
+      var fv=F(q);
+      if(Math.abs(fv)<(hi-lo)*0.06) continue;
+      var p0=X(q), d=(fv>0)?1:-1, ln=Math.min(17,5+Math.abs(fv)*7);
+      ctx.beginPath(); ctx.moveTo(p0,NY+8); ctx.lineTo(p0+d*ln,NY+8); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(p0+d*ln,NY+8); ctx.lineTo(p0+d*(ln-4),NY+5); ctx.lineTo(p0+d*(ln-4),NY+11);
+      ctx.closePath(); ctx.fillStyle="rgba(139,149,164,.5)"; ctx.fill();
+    }
+    ctx.beginPath(); ctx.arc(X(Math.max(XR0,Math.min(XR1,x))),NY+8,5.2,0,Math.PI*2);
+    ctx.fillStyle=C.cyan; ctx.fill();
+    // 分岔图
+    ctx.strokeStyle="rgba(255,255,255,.14)"; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(padL,dBot); ctx.lineTo(w-padR,dBot); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(dX(0),dTop-6); ctx.lineTo(dX(0),dBot); ctx.stroke();
+    for(i=0;i<diagram.length;i++){
+      var pt=diagram[i];
+      ctx.fillStyle=pt[2]?"#e8b04b":"#4a5563";
+      ctx.fillRect(dX(pt[0])-0.8, dY(pt[1])-0.8, 1.8, 1.8);
+    }
+    ctx.strokeStyle="rgba(232,176,75,.55)"; ctx.setLineDash([4,4]); ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(dX(mu),dTop-6); ctx.lineTo(dX(mu),dBot); ctx.stroke(); ctx.setLineDash([]);
+    for(i=0;i<rs.length;i++){
+      var sl2=(F(rs[i]+2e-4)-F(rs[i]-2e-4))/4e-4;
+      ctx.beginPath(); ctx.arc(dX(mu),dY(rs[i]),3.4,0,Math.PI*2);
+      ctx.fillStyle=(sl2<0)?C.warm:"#080b10";
+      ctx.strokeStyle=C.warm; ctx.lineWidth=1.3; ctx.fill(); ctx.stroke();
+    }
+    tip(ctx,"分岔图：横轴 μ，纵轴 x*",padL,dTop-10,C.text,10);
+    tip(ctx,"μ",w-padR-4,dBot-6,C.text,10,"right");
+    var ro=$("#ro1");
+    if(ro) ro.innerHTML="μ = <b>"+mu.toFixed(2)+"</b>　"+SYS[si].tag+"　不动点 <b>"+rs.length+"</b> 个　x = <b>"+x.toFixed(3)+"</b>　"+status;
+  }
+  restart(SYS[0].x0);
+  buildDiagram();
+  loop(cv,function(){ rk(); rk(); draw(); });
+  var sl=$("#p1");
+  if(sl) sl.addEventListener("input",function(){ mu=parseFloat(sl.value); setP(mu); });
+  var rb=$("#reset1");
+  if(rb) rb.addEventListener("click",function(){ mu=SYS[si].mu0; setP(mu); restart(SYS[si].x0); });
+  window.NDC1={pick:function(i){
+    si=(i>=0&&i<3)?i:0;
+    mu=SYS[si].mu0; setP(mu); restart(SYS[si].x0); buildDiagram();
+  }};
+})();
+
+
+/* ================= 小测 ================= */
+(function(){
+  var box=$("#quizbox"); if(!box) return;
+  var QS=[
+    {q:"ẋ = μ − x² 在 μ_c = 0 处的「签名」是哪一组？",
+     o:["f = 0，但 f′ ≠ 0","f = 0 且 f′ = 0（相切），零点数由 2 变 0","f 不连续","有两个参数同时变"],a:1,
+     w:"切触意味着两个零点撞在一起：f=0 且 f′=0。这既是鞍结的标志，也是线性判据失效的地方。"},
+    {q:"看到什么结构，基本可以认定是跨临界分岔？",
+     o:["x = 0 对一切 μ 都是解（可写成 ẋ = x·g(x,μ)）","方程关于 x → −x 对称","有两个参数","不动点个数从 1 变 3"],a:0,
+     w:"平凡解不会被生灭，只能失稳：g(0,μ_c)=0 就是跨临界的信号。对称对应叉式，个数突变对应鞍结或叉式。"},
+    {q:"激光器泵浦越过阈值 P = 1 时，光子数会怎样？",
+     o:["突然跳到有限值（有滞后）","从零平滑长出来，n* ∝ P − 1","一直为零","在零与非零之间振荡"],a:1,
+     w:"这是跨临界分岔，属于「软」分岔：零解把稳定性交给 n* = k(P−1)/Γ，输出功率随泵浦线性增长，没有跳变与滞后。"},
+    {q:"旋转环转速越过 ω_c² = g/R 之后，最低点 φ* = 0 的命运是？",
+     o:["仍然稳定，只是变浅","失稳，同时出现 ±φ* 两个稳定平衡，φ* ∝ √(ω²−ω_c²)","消失，珠子飞出去","变成半稳定"],a:1,
+     w:"最低点那支在 ω_c 处失稳（μ−1 过零），新平衡由 cos φ* = g/(ω²R) 给出，两支对称张开，指数 1/2 —— 标准叉式。"},
+    {q:"给 ẋ = μx − x³ 加上一个常数项 h（h ≠ 0），分岔图会变成什么？",
+     o:["还是完美的叉式，只是整体平移","叉子断开：变成一个鞍结点 + 一段双稳滞后窗口","变成跨临界","不动点全部消失"],a:1,
+     w:"常数项破坏了 x → −x 的对称性，奇偶性不再成立。于是叉式「断开」成两个鞍结，中间夹着两个稳定态并存的滞后区间。"}
+  ];
+  var KEY="ndc3-quiz", DKEY="ndc3-done";
+  var saved={}, score=0, answered=0;
+  try{ saved=JSON.parse(localStorage.getItem(KEY)||"{}"); }catch(e){ saved={}; }
+
+  QS.forEach(function(item,qi){
+    var w=document.createElement("div"); w.className="q";
+    var stem=document.createElement("div"); stem.className="stem"; stem.textContent="Q"+(qi+1)+"　"+item.q;
+    var opts=document.createElement("div");
+    var fb=document.createElement("div"); fb.className="fb";
+    w.appendChild(stem); w.appendChild(opts); w.appendChild(fb);
+    item.o.forEach(function(txt,oi){
+      var d=document.createElement("div"); d.className="opt";
+      var k=document.createElement("span"); k.className="k"; k.textContent=String.fromCharCode(65+oi);
+      var s=document.createElement("span"); s.textContent=txt;
+      d.appendChild(k); d.appendChild(s);
+      d.addEventListener("click",function(){
+        if(opts.getAttribute("data-locked")==="1") return;
+        opts.setAttribute("data-locked","1");
+        var ok=oi===item.a;
+        Array.prototype.forEach.call(opts.children,function(c,ci){
+          c.classList.add("locked");
+          if(ci===item.a) c.classList.add("right");
+        });
+        if(!ok) d.classList.add("wrong");
+        fb.textContent=(ok?"答对了。":"再看一眼。")+item.w;
+        fb.className="fb show"+(ok?"":" bad");
+        answered++; if(ok) score++;
+        saved[qi]=oi;
+        try{ localStorage.setItem(KEY,JSON.stringify(saved)); }catch(e){}
+        paintScore();
+      });
+      opts.appendChild(d);
+    });
+    if(saved[qi]!==undefined){
+      var oi2=saved[qi];
+      opts.setAttribute("data-locked","1");
+      Array.prototype.forEach.call(opts.children,function(c,ci){
+        c.classList.add("locked");
+        if(ci===item.a) c.classList.add("right");
+      });
+      if(oi2!==item.a) opts.children[oi2].classList.add("wrong");
+      fb.textContent=(oi2===item.a?"答对了。":"再看一眼。")+item.w;
+      fb.className="fb show"+(oi2===item.a?"":" bad");
+    }
+    box.appendChild(w);
+  });
+  function paintScore(){
+    var el=$("#score"); if(!el) return;
+    if(!answered){ el.innerHTML="共 5 题 · 点选项立刻判对错"; return; }
+    el.innerHTML="已作答 <b>"+answered+"</b> / 5　答对 <b>"+score+"</b> 题　"+
+      (score===5?"全对，这一章过关了。":score>=3?"基本到位，错的那几道回看解析。":"建议回去把演示再做一遍。");
+  }
+  paintScore();
+  var chk=$("#doneChk"), boxD=$("#donebox");
+  try{ chk.checked=localStorage.getItem(DKEY)==="1"; }catch(e){}
+  if(chk) chk.addEventListener("change",function(){
+    try{ localStorage.setItem(DKEY,chk.checked?"1":"0"); }catch(e){}
+    if(boxD) boxD.style.background=chk.checked?"rgba(79,191,168,.16)":"";
+  });
+})();
+
+/* 四个演示都就绪后，把当前页（含步骤）对齐一次，保证首屏与第 1 步一致 */
+setStep(idx,steps[idx]||0);
+})();
+</script>
+
+</body>
+</html>

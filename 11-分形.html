@@ -1,0 +1,1258 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>第 11 章 · 分形 —— 非线性动力学与混沌</title>
+<style>
+/* ================= 0. 基础 ================= */
+:root{
+  --bg:#080b10; --bg2:#0e141d; --panel:#101822; --panel2:#0b1119;
+  --ink:#eee8dc; --ink2:#c3cad6; --mut:#8b95a4; --dim:#5c6775;
+  --gold:#e8b04b; --cyan:#62d0ff; --warm:#ff9770; --teal:#4fbfa8; --red:#d9534a;
+  --line:rgba(255,255,255,.10); --line2:rgba(255,255,255,.06);
+  --serif:"Source Han Serif SC","Noto Serif SC","Songti SC",SimSun,"STSong",serif;
+  --sans:"PingFang SC","HarmonyOS Sans SC","Microsoft YaHei","Hiragino Sans GB",system-ui,sans-serif;
+  --mono:"JetBrains Mono","Cascadia Code",Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--sans);
+  font-size:16px; line-height:1.85; overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4{font-family:var(--serif);font-weight:700;line-height:1.28;letter-spacing:.01em}
+em{font-style:normal;color:var(--gold)}
+::selection{background:rgba(232,176,75,.28)}
+
+/* ================= 1. 背景（全篇同一底色，只有缓慢呼吸的光） ================= */
+.bg{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.bg .orb{position:absolute;border-radius:50%;filter:blur(90px);opacity:.30;mix-blend-mode:screen}
+.bg .o1{width:52vw;height:52vw;left:-12vw;top:-14vw;
+  background:radial-gradient(circle,rgba(43,76,126,.9),transparent 66%);
+  animation:drift1 34s ease-in-out infinite alternate}
+.bg .o2{width:44vw;height:44vw;right:-10vw;bottom:-14vw;
+  background:radial-gradient(circle,rgba(150,62,44,.75),transparent 66%);
+  animation:drift2 42s ease-in-out infinite alternate}
+.bg .o3{width:30vw;height:30vw;left:44vw;top:38vh;opacity:.13;
+  background:radial-gradient(circle,rgba(232,176,75,.8),transparent 68%);
+  animation:drift1 28s ease-in-out infinite alternate-reverse}
+@keyframes drift1{from{transform:translate3d(0,0,0) scale(1)}to{transform:translate3d(4vw,3vh,0) scale(1.12)}}
+@keyframes drift2{from{transform:translate3d(0,0,0) scale(1.06)}to{transform:translate3d(-3vw,-4vh,0) scale(.96)}}
+.bg .mesh{position:absolute;inset:-10%;
+  background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);
+  background-size:72px 72px;
+  -webkit-mask-image:radial-gradient(62% 58% at 50% 45%,#000 20%,transparent 80%);
+  mask-image:radial-gradient(62% 58% at 50% 45%,#000 20%,transparent 80%);
+  animation:meshmove 60s linear infinite}
+@keyframes meshmove{to{transform:translate3d(-72px,-72px,0)}}
+
+/* ================= 2. 幻灯片容器 ================= */
+.deck{position:fixed;inset:0;z-index:2}
+.page{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  padding:clamp(24px,5vh,64px) clamp(20px,4vw,56px);
+  opacity:0;visibility:hidden;pointer-events:none;
+  transform:scale(1.015);filter:blur(7px);
+  transition:opacity .62s cubic-bezier(.4,0,.2,1),transform .72s cubic-bezier(.4,0,.2,1),
+             filter .62s cubic-bezier(.4,0,.2,1),visibility .62s;
+}
+.page.on{opacity:1;visibility:visible;transform:none;filter:none;pointer-events:auto;z-index:3}
+.page-inner{width:min(1140px,100%);max-height:100%;overflow:auto;overscroll-behavior:contain;
+  scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent}
+.page-inner::-webkit-scrollbar{width:6px}
+.page-inner::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:6px}
+
+/* 入场：逐级浮现（不是从下往上滑，而是轻微上浮+淡入） */
+.a{opacity:0;transform:translateY(16px);
+  transition:opacity .68s cubic-bezier(.2,.8,.3,1),transform .68s cubic-bezier(.2,.8,.3,1)}
+.page.on .a{opacity:1;transform:none}
+.page.on .a:nth-child(1){transition-delay:.05s}
+.page.on .a:nth-child(2){transition-delay:.11s}
+.page.on .a:nth-child(3){transition-delay:.17s}
+.page.on .a:nth-child(4){transition-delay:.23s}
+.page.on .a:nth-child(5){transition-delay:.29s}
+.page.on .a:nth-child(6){transition-delay:.35s}
+.page.on .a:nth-child(7){transition-delay:.41s}
+.page.on .a:nth-child(8){transition-delay:.47s}
+
+/* ================= 3. HUD ================= */
+.rail{position:fixed;top:0;left:0;height:2px;z-index:60;background:linear-gradient(90deg,var(--gold),var(--warm));
+  box-shadow:0 0 14px rgba(232,176,75,.55);transition:width .55s cubic-bezier(.4,0,.2,1)}
+.dots{position:fixed;right:clamp(12px,2vw,26px);top:50%;transform:translateY(-50%);z-index:60;
+  display:flex;flex-direction:column;gap:7px;align-items:flex-end}
+.dots button{appearance:none;border:0;background:transparent;padding:3px;cursor:pointer;display:flex;align-items:center;gap:8px}
+.dots i{display:block;width:14px;height:2px;background:rgba(255,255,255,.20);transition:.3s;border-radius:2px}
+.dots button:hover i{background:rgba(255,255,255,.45);width:20px}
+.dots button.on i{background:var(--gold);width:26px}
+.counter{position:fixed;right:clamp(12px,2vw,26px);bottom:18px;z-index:60;
+  font:600 11.5px/1 var(--mono);letter-spacing:.18em;color:var(--dim)}
+.counter b{color:var(--gold)}
+.where{position:fixed;left:clamp(14px,2.4vw,30px);bottom:18px;z-index:60;
+  font:500 11.5px/1.6 var(--sans);letter-spacing:.14em;color:var(--dim);
+  max-width:44vw;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.where b{color:var(--mut);font-weight:500}
+.tip{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:60;
+  font:500 11.5px/1 var(--sans);letter-spacing:.2em;color:var(--dim);
+  display:flex;align-items:center;gap:9px;transition:opacity .5s}
+.tip i{width:5px;height:5px;border-radius:50%;background:var(--gold);animation:blip 1.7s infinite}
+@keyframes blip{0%,100%{opacity:.25}50%{opacity:1}}
+.tip.hide{opacity:0;pointer-events:none}
+
+/* ================= 4. 版式组件 ================= */
+.kicker{font:600 10.5px/1 var(--sans);letter-spacing:.3em;color:var(--gold);
+  display:flex;align-items:center;gap:12px;margin-bottom:20px;text-transform:uppercase}
+.kicker::before{content:"";width:34px;height:1px;background:linear-gradient(90deg,var(--gold),transparent)}
+h2{font-size:clamp(24px,3.4vw,40px);color:#f4eee2;margin-bottom:18px;text-wrap:balance}
+.p{font-size:clamp(14.6px,1.15vw,16.4px);line-height:1.95;color:var(--ink2);margin-bottom:.95em}
+.p strong{color:#f6f1e5;font-weight:600;background:linear-gradient(transparent 64%,rgba(232,176,75,.30) 0);padding:0 1px}
+.p b{color:#f6f1e5}
+.pull{border-left:2px solid var(--gold);padding-left:18px;margin:22px 0;
+  font-family:var(--serif);font-size:clamp(15px,1.5vw,19px);line-height:1.8;color:#efe6d2}
+.pull cite{display:block;font-family:var(--sans);font-size:11.5px;color:var(--dim);font-style:normal;margin-top:8px;letter-spacing:.08em}
+.split{display:grid;grid-template-columns:1.06fr .94fr;gap:clamp(22px,4vw,60px);align-items:center}
+.split.rev{grid-template-columns:.94fr 1.06fr}
+.center{text-align:center}
+.fig{background:rgba(255,255,255,.028);border:1px solid var(--line2);border-radius:18px;padding:16px}
+.fig svg{display:block;width:100%;height:auto}
+.figcap{margin-top:10px;font-size:12px;line-height:1.7;color:var(--dim)}
+.card{background:rgba(255,255,255,.032);border:1px solid var(--line2);border-radius:16px;padding:20px 22px}
+.card h4{font-size:15.5px;color:#f2ecdf;margin-bottom:9px}
+.card p{font-size:13.6px;line-height:1.85;color:var(--mut)}
+.chips{display:flex;flex-wrap:wrap;gap:9px;margin-top:22px}
+.chips span{font-size:11.5px;letter-spacing:.08em;color:var(--mut);
+  border:1px solid var(--line);padding:6px 12px;border-radius:999px}
+
+/* 演示台 */
+.demo{background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.015));
+  border:1px solid var(--line);border-radius:18px;padding:14px;position:relative}
+.demo::before{content:"可玩";position:absolute;top:-9px;left:18px;font:600 9.5px/1 var(--sans);
+  letter-spacing:.24em;color:#0a0d12;background:var(--gold);padding:4px 8px;border-radius:4px}
+.demo canvas{display:block;width:100%;border-radius:12px;background:#05070b;touch-action:none;cursor:crosshair}
+.ctrls{display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin-top:12px}
+.chip{appearance:none;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.03);
+  color:#c3cbd8;font:500 11.5px/1 var(--mono);padding:7px 11px;border-radius:999px;cursor:pointer;transition:.18s}
+.chip:hover{background:rgba(255,255,255,.09);color:#fff}
+.chip.on{background:var(--gold);color:#0a0d12;border-color:var(--gold);font-weight:700}
+.btn{appearance:none;border:1px solid rgba(255,255,255,.18);background:transparent;color:#dfe6ef;
+  font:500 11.5px/1 var(--sans);padding:8px 13px;border-radius:8px;cursor:pointer;letter-spacing:.05em}
+.btn:hover{background:rgba(255,255,255,.08)}
+.slider{display:flex;align-items:center;gap:9px;font:500 11.5px/1 var(--mono);color:var(--mut)}
+.slider input[type=range]{appearance:none;width:clamp(100px,16vw,170px);height:3px;border-radius:3px;
+  background:rgba(255,255,255,.18);outline:none}
+.slider input[type=range]::-webkit-slider-thumb{appearance:none;width:12px;height:12px;border-radius:50%;
+  background:var(--gold);cursor:pointer;box-shadow:0 0 0 3px rgba(232,176,75,.2)}
+.slider b{color:var(--gold);font-weight:600;min-width:3.2em;display:inline-block}
+.readout{font:500 11.5px/1.7 var(--mono);color:var(--dim);margin-top:9px}
+.readout b{color:var(--teal);font-weight:600}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:9px;font:500 11px/1 var(--sans);color:var(--dim)}
+.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+
+/* 步骤文字（演示页右侧） */
+.steps{position:relative;min-height:clamp(240px,40vh,330px)}
+.step{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;
+  opacity:0;transform:translateY(14px);transition:opacity .5s,transform .5s;pointer-events:none}
+.step.on{opacity:1;transform:none;pointer-events:auto}
+.snum{font:700 10px/1 var(--mono);letter-spacing:.24em;color:var(--gold);margin-bottom:13px}
+.step h3{font-family:var(--serif);font-size:clamp(16px,1.85vw,22px);color:#f3eddf;margin-bottom:10px;line-height:1.5}
+.step p{font-size:13.8px;line-height:1.9;color:var(--mut)}
+.step p strong{color:#f0e7d5;font-weight:600}
+.sdots{display:flex;gap:6px;margin-top:18px}
+.sdots i{width:15px;height:2px;background:rgba(255,255,255,.16);transition:.3s}
+.sdots i.on{background:var(--gold);width:24px}
+
+/* 折叠 */
+details{border-radius:14px;overflow:hidden;border:1px solid var(--line2);background:rgba(255,255,255,.025)}
+details>summary{cursor:pointer;list-style:none;padding:13px 18px;font:600 13px/1.6 var(--sans);color:#e6dfd0;
+  display:flex;align-items:center;gap:10px}
+details>summary::-webkit-details-marker{display:none}
+details>summary::after{content:"+";margin-left:auto;color:var(--gold);font-weight:400;font-size:16px;transition:.3s}
+details[open]>summary::after{transform:rotate(45deg)}
+details .body{padding:0 20px 18px;font-size:13.6px;line-height:1.95;color:var(--mut)}
+details .body p{margin-bottom:.7em}
+details .body b{color:#f0e7d5}
+.tag{font:700 9.5px/1 var(--mono);letter-spacing:.14em;background:rgba(232,176,75,.16);
+  color:var(--gold);padding:4px 7px;border-radius:4px}
+.tag.blue{background:rgba(98,208,255,.14);color:var(--cyan)}
+.formula{display:block;text-align:center;font-family:var(--serif);font-size:16px;color:#f0e7d5;
+  padding:11px 8px;margin:11px 0;background:rgba(255,255,255,.04);border-radius:9px;letter-spacing:.01em}
+code{font:500 12.5px/1.4 var(--mono);background:rgba(255,255,255,.07);padding:2px 6px;border-radius:4px;color:#e7dfd0}
+
+/* 推导页 */
+.proofs{font-size:12.6px;line-height:1.9}
+.proofs .formula{font-size:14.5px;margin:9px 0;padding:9px 6px}
+@media(min-width:1180px){
+  .proofs{columns:2;column-gap:34px;column-rule:1px solid rgba(255,255,255,.07)}
+  .proofs>p,.proofs>.formula{break-inside:avoid}
+}
+.stepnum{color:var(--cyan);font-weight:700;font-family:var(--mono);font-size:12px;margin-right:6px}
+
+/* 章卡 */
+.map{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-top:20px}
+.mcard{background:rgba(255,255,255,.03);border:1px solid var(--line2);border-radius:12px;padding:12px 13px;
+  cursor:pointer;transition:.22s}
+.mcard:hover{background:rgba(255,255,255,.06);border-color:rgba(232,176,75,.45);transform:translateY(-2px)}
+.mcard .n{font:700 9.5px/1 var(--mono);color:var(--gold);letter-spacing:.14em}
+.mcard h5{font-family:var(--serif);font-size:14px;margin:7px 0 0;color:#f0eade;font-weight:700}
+.mcard .one{font-size:11.5px;color:var(--dim);line-height:1.6;margin-top:5px}
+.mcard.here{border-color:rgba(232,176,75,.6);background:rgba(232,176,75,.10)}
+
+/* 小测 */
+.qs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.q{background:rgba(255,255,255,.028);border:1px solid var(--line2);border-radius:13px;padding:14px 16px}
+.q .stem{font-size:13px;line-height:1.7;color:#ece5d7;margin-bottom:9px;font-weight:500}
+.opt{display:flex;gap:8px;align-items:flex-start;padding:7px 10px;border:1px solid var(--line2);
+  border-radius:8px;cursor:pointer;font-size:12.3px;line-height:1.6;color:#b9c2cf;margin-bottom:6px;transition:.16s}
+.opt:hover{background:rgba(255,255,255,.05)}
+.opt .k{font:700 10.5px/1.5 var(--mono);color:var(--dim);flex:none}
+.opt.right{border-color:rgba(79,191,168,.7);background:rgba(79,191,168,.12);color:#d8f5ec}
+.opt.wrong{border-color:rgba(217,83,74,.65);background:rgba(217,83,74,.12);color:#ffd7d2}
+.opt.locked{cursor:default}
+.fb{font-size:11.6px;line-height:1.7;color:var(--teal);margin-top:4px;display:none}
+.fb.show{display:block}
+.fb.bad{color:#ffb4a6}
+.score{display:flex;align-items:center;gap:16px;margin-top:14px;font-size:12.5px;color:var(--dim);flex-wrap:wrap}
+.score b{color:var(--gold);font-size:17px;font-family:var(--serif)}
+.done{display:flex;align-items:center;gap:12px;margin-top:12px;padding:11px 14px;
+  border:1px dashed rgba(79,191,168,.45);border-radius:12px;background:rgba(79,191,168,.06);cursor:pointer}
+.done input{appearance:none;width:20px;height:20px;border:2px solid var(--teal);border-radius:6px;
+  flex:none;cursor:pointer;position:relative;background:transparent}
+.done input:checked{background:var(--teal)}
+.done input:checked::after{content:"✓";position:absolute;inset:0;color:#08120f;font-size:13px;
+  display:flex;align-items:center;justify-content:center;font-weight:700}
+.done span{font-size:12.5px;color:#a9d9cf}
+
+/* ================= 5. 响应式 ================= */
+@media(max-width:980px){
+  .split,.split.rev{grid-template-columns:1fr;gap:20px}
+  .map{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .qs{grid-template-columns:1fr}
+  .dots{display:none}
+  .where{display:none}
+}
+@media(max-width:640px){
+  body{font-size:15px}
+  .page{padding:18px 16px}
+  .steps{min-height:0}
+  .step{position:static;opacity:1;transform:none;pointer-events:auto;margin-bottom:16px}
+  .step:last-child{margin-bottom:0}
+  .tip{display:none}
+}
+@media(prefers-reduced-motion:reduce){
+  .a{opacity:1;transform:none}
+  .bg .orb,.bg .mesh{animation:none}
+  .page{transition:opacity .2s}
+}
+
+/* 页脚角标：对应原书节号 */
+.pfoot{position:absolute;right:clamp(20px,4vw,56px);bottom:12px;font:11px/1 var(--mono);
+  color:var(--dim);opacity:.8;letter-spacing:.06em;pointer-events:none}
+</style>
+</head>
+<body>
+
+<div class="bg" aria-hidden="true">
+  <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+  <div class="mesh"></div>
+</div>
+
+<div class="rail" id="rail"></div>
+<nav class="dots" id="dots" aria-label="页面导航"></nav>
+<div class="where" id="where"></div>
+<div class="counter" id="counter"><b>01</b> / 23</div>
+<div class="tip" id="tip"><i></i>滚动滚轮 · 或按 ↓ / 空格 翻页</div>
+
+<main class="deck" id="deck">
+
+  <!-- ========== 01 封面 ========== -->
+  <section class="page" data-title="封面">
+    <div class="page-inner center">
+      <div class="a kicker" style="justify-content:center">第 11 章 · CHAPTER ELEVEN</div>
+      <h2 class="a" style="font-size:clamp(28px,4.6vw,54px);line-height:1.18;color:#f6f1e6;margin:6px 0 0">
+        有些集合，<em>维数不是整数</em>
+      </h2>
+      <p class="a p" style="max-width:44em;margin:24px auto 0;color:var(--mut)">
+        第 9 章的吸引子体积为零，却又不是线、不是面。<br>
+        这一章要给它一个「量出来」的数——办法很朴素：<strong>数盒子</strong>。</p>
+      <div class="a chips" style="justify-content:center;margin-top:28px">
+        <span>原书 第 11 章「分形」</span><span>约 50 分钟</span><span>2 个可玩演示</span><span>4 张数值图</span><span>2 个完整推导</span><span>5 道自测</span>
+      </div>
+    </div>
+    <div class="pfoot">—</div>
+  </section>
+
+  <!-- ========== 02 为什么需要维数 ========== -->
+  <section class="page" data-title="为什么要一个「非整数」的维数">
+    <div class="page-inner">
+      <div class="a kicker">§11.0 引言 · 动机</div>
+      <h2 class="a">「体积为零」，等于「不存在」吗</h2>
+      <p class="a p">第 9 章算过：洛伦兹系统的体积按 e<sup>−13.667t</sup> 收缩。所以任何吸引子的<strong>三维体积都是零</strong>。可轨道明明在里面跑个不停——它不可能只是一堆点。</p>
+      <p class="a p">矛盾出在「体积」这个量太粗。用体积给一个薄片量大小，得到的永远是 0；用长度量，又永远是 ∞。<strong>需要一个能取中间值的尺子</strong>——那就是维数。</p>
+      <div class="split" style="margin-top:16px;gap:14px">
+        <div class="a card" style="border-color:rgba(98,208,255,.3)">
+          <h4 style="color:#bfe6ff">思路：换尺子看标度</h4>
+          <p>用边长 ε 的盒子去盖住集合，数需要多少个盒子 <em>N</em>(ε)。<br>
+             · 一条线段：<em>N</em> ∝ ε<sup>−1</sup><br>
+             · 一块面：<em>N</em> ∝ ε<sup>−2</sup><br>
+             · 康托尔集：<em>N</em> ∝ ε<sup>−0.631</sup></p>
+          <p style="margin-top:6px">指数不是整数，就说明它「介于」线段与面之间。</p>
+        </div>
+        <div class="a card" style="border-color:rgba(232,176,75,.32)">
+          <h4 style="color:#f3d79a">这一章的两个层次</h4>
+          <p><strong>几何层</strong>：康托尔集、康托尔尘、科赫曲线——都是能画出来的规矩图形，维数能算准（§11.2–11.3）。<br>
+             <strong>动力学层</strong>：奇怪吸引子——画不出来那么规矩，只能靠盒计数与关联维数去量（§11.4–11.5）。</p>
+        </div>
+      </div>
+      <p class="a p" style="margin-top:18px;color:var(--mut);font-size:13.6px">一句提醒：这一章的「维数」有好几种（自相似维数、盒维数、关联维数、点态维数）。它们对规矩图形给出同一个数，对奇怪吸引子会略有差别——差别本身就是信息。</p>
+    </div>
+    <div class="pfoot">§11.1 可数与不可数</div>
+  </section>
+
+  <!-- ========== 03 可数与不可数 ========== -->
+  <section class="page" data-title="§11.1 · 可数与不可数">
+    <div class="page-inner">
+      <div class="a kicker">§11.1 · 可数与不可数</div>
+      <h2 class="a">「点很多」有两个意思，别混</h2>
+      <p class="a p">康托尔集的总长度是零（§11.2 会算）。那它是不是只剩几个点？<strong>不是</strong>。它和整条线段的点一样多——都是<strong>不可数</strong>的。</p>
+      <p class="a p">两个概念要分开：</p>
+      <div class="split" style="margin-top:12px;gap:14px">
+        <div class="a card">
+          <h4>基数（有多少个点）</h4>
+          <p>能与自然数一一对应的叫<strong>可数</strong>；否则叫<strong>不可数</strong>。整数、有理数都是可数的；实数区间不可数。康托尔集虽然「删掉了那么多」，剩下的点仍然可以跟 [0,1] 一一对应（§11.2 用三进制给出这个对应）。</p>
+        </div>
+        <div class="a card">
+          <h4>测度（占多长）</h4>
+          <p>长度、面积、体积这类「量」。康托尔集的长度是 0。<strong>「长度为 0」与「点很少」是两件事</strong>：它点极多（不可数），却一个长度都不占。</p>
+        </div>
+      </div>
+      <p class="a p" style="margin-top:16px">这正是分形麻烦的地方：<strong>常规的「长度/面积」在这类集合上失效</strong>——要么是 0，要么是 ∞，没有中间值。维数就是补这个空的那个量。</p>
+      <p class="a p" style="color:var(--mut);font-size:13.6px">类比与它的失效处：可以把维数想成「放大看有多密」；但别把它想成「长得像几维」——一条康托尔尘看起来像一片雾，维数却只有 0.63。另一个常见误解是「不可数就一定占长度」：有理数在 [0,1] 里稠密（任何小区间都有无穷多个），却可数、总长度为零；康托尔集不可数，长度也是零。<strong>稠密、可数、测度、维数，是四把不同的尺子。</strong></p>
+    </div>
+    <div class="pfoot">§11.1 可数与不可数</div>
+  </section>
+
+  <!-- ========== 04 康托尔集构造 ========== -->
+  <section class="page" data-title="§11.2 · 康托尔集的构造">
+    <div class="page-inner">
+      <div class="split rev">
+        <div class="a fig">
+          <svg viewBox="0 0 480 320" role="img" aria-label="康托尔集的前六级构造"><path d="M26.0 40.0 L456.8 40.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><text x="20.0" y="43.5" fill="#8b95a4" font-size="9.2" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="end">n=0</text><text x="450.0" y="43.5" fill="rgba(139,149,164,.85)" font-size="8.6" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="end">(2/3)^0</text><path d="M26.0 84.0 L168.8 84.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M314.0 84.0 L456.8 84.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><text x="20.0" y="87.5" fill="#8b95a4" font-size="9.2" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="end">n=1</text><text x="450.0" y="87.5" fill="rgba(139,149,164,.85)" font-size="8.6" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="end">(2/3)^1</text><path d="M26.0 128.0 L72.8 128.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M122.0 128.0 L168.8 128.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M314.0 128.0 L360.8 128.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M410.0 128.0 L456.8 128.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><text x="20.0" y="131.5" fill="#8b95a4" font-size="9.2" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="end">n=2</text><text x="450.0" y="131.5" fill="rgba(139,149,164,.85)" font-size="8.6" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="end">(2/3)^2</text><path d="M26.0 172.0 L40.8 172.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M58.0 172.0 L72.8 172.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M122.0 172.0 L136.8 172.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M154.0 172.0 L168.8 172.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M314.0 172.0 L328.8 172.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M346.0 172.0 L360.8 172.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M410.0 172.0 L424.8 172.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M442.0 172.0 L456.8 172.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><text x="20.0" y="175.5" fill="#8b95a4" font-size="9.2" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="end">n=3</text><text x="450.0" y="175.5" fill="rgba(139,149,164,.85)" font-size="8.6" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="end">(2/3)^3</text><path d="M26.0 216.0 L30.1 216.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M36.7 216.0 L40.8 216.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M58.0 216.0 L62.1 216.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M68.7 216.0 L72.8 216.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M122.0 216.0 L126.1 216.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M132.7 216.0 L136.8 216.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M154.0 216.0 L158.1 216.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M164.7 216.0 L168.8 216.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M314.0 216.0 L318.1 216.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M324.7 216.0 L328.8 216.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M346.0 216.0 L350.1 216.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M356.7 216.0 L360.8 216.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M410.0 216.0 L414.1 216.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M420.7 216.0 L424.8 216.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M442.0 216.0 L446.1 216.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M452.7 216.0 L456.8 216.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><text x="20.0" y="219.5" fill="#8b95a4" font-size="9.2" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="end">n=4</text><text x="450.0" y="219.5" fill="rgba(139,149,164,.85)" font-size="8.6" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="end">(2/3)^4</text><path d="M26.0 260.0 L26.6 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M29.6 260.0 L30.1 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M36.7 260.0 L37.2 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M40.2 260.0 L40.8 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M58.0 260.0 L58.6 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M61.6 260.0 L62.1 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M68.7 260.0 L69.2 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M72.2 260.0 L72.8 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M122.0 260.0 L122.6 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M125.6 260.0 L126.1 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M132.7 260.0 L133.2 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M136.2 260.0 L136.8 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M154.0 260.0 L154.6 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M157.6 260.0 L158.1 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M164.7 260.0 L165.2 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M168.2 260.0 L168.8 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M314.0 260.0 L314.6 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M317.6 260.0 L318.1 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M324.7 260.0 L325.2 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M328.2 260.0 L328.8 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M346.0 260.0 L346.6 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M349.6 260.0 L350.1 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M356.7 260.0 L357.2 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M360.2 260.0 L360.8 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M410.0 260.0 L410.6 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M413.6 260.0 L414.1 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M420.7 260.0 L421.2 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M424.2 260.0 L424.8 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M442.0 260.0 L442.6 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M445.6 260.0 L446.1 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M452.7 260.0 L453.2 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M456.2 260.0 L456.8 260.0" fill="none" stroke="#62d0ff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><text x="20.0" y="263.5" fill="#8b95a4" font-size="9.2" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="end">n=5</text><text x="450.0" y="263.5" fill="rgba(139,149,164,.85)" font-size="8.6" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="end">(2/3)^5</text><text x="240.0" y="20.0" fill="#8b95a4" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">康托尔集：每一步删掉中间三分之一（红线＝保留）</text><text x="240.0" y="308.0" fill="rgba(139,149,164,.95)" font-size="9.4" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">总长度 (2/3)ⁿ → 0，可剩下的点一个不少（不可数）</text></svg>
+          <div class="figcap">数值生成的前六级：第 n 级剩 2ⁿ 段，每段长 3<sup>−n</sup>，总长 (2/3)ⁿ。n 增大时总长趋于 0，但段数指数增长——两个趋势打架，最后的集合就是「点多、长度为零」。</div>
+        </div>
+        <div>
+          <div class="a kicker">§11.2 · 康托尔集</div>
+          <h2 class="a">删掉中间三分之一，一直删下去</h2>
+          <p class="a p">从区间 [0, 1] 开始：<br>
+             · 第一步删掉中间 1/3，剩 [0, 1/3] 与 [2/3, 1]；<br>
+             · 第二步各删中间 1/3，剩 4 段；<br>
+             · 第 n 步剩 2ⁿ 段，每段长 3<sup>−n</sup>。</p>
+          <p class="a p">总长度：<em>L</em><sub>n</sub> = 2ⁿ·3<sup>−n</sup> = (2/3)ⁿ → 0。所以极限集合的<strong>长度为零</strong>。</p>
+          <p class="a p">可它不是空的：每一步保留下来的端点全都在里面（比如 0、1、1/3、2/3 ……），而且还有无穷多非端点。剩下的集合记作 <strong><em>C</em></strong>，就是<strong>康托尔集</strong>。</p>
+          <p class="a p" style="color:var(--mut);font-size:13.6px">为什么值得从它开始：它是「自相似」最简单、也最容易算准的例子。它的维数能一行算出来，而算法对奇怪吸引子同样适用。</p>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§11.2 康托尔集</div>
+  </section>
+
+  <!-- ========== 05 三进制与不可数 ========== -->
+  <section class="page" data-title="§11.2 · 三进制展开与不可数">
+    <div class="page-inner">
+      <div class="a kicker">§11.2 · 三进制</div>
+      <h2 class="a">康托尔集＝三进制里没有数字 1 的点</h2>
+      <p class="a p">把 [0, 1] 里的数写成三进制 0.<em>a</em>₁<em>a</em>₂<em>a</em>₃…（每个 <em>a</em><sub>i</sub> ∈ {0, 1, 2}）。第一步删掉中间 1/3，删掉的正是<strong>第一位是 1</strong>的所有数；第二步删掉第二位是 1 的数；依此类推。</p>
+      <div class="a card" style="border-color:rgba(232,176,75,.36);margin:14px 0">
+        <p>所以：<strong><em>C</em> = {0.<em>a</em>₁<em>a</em>₂… (三进制) : 每个 <em>a</em><sub>i</sub> ∈ {0, 2}}</strong>。</p>
+      </div>
+      <p class="a p"><strong>为什么它不可数：</strong>每个 0/2 序列都对应 <em>C</em> 里一个点，而这样的序列与 [0,1] 的二进制序列一一对应。用对角线法可以证明：任何可数清单都漏掉某个点（把第 n 个点的第 n 位改成另一个值即可）。所以 <em>C</em> 与 [0,1] <strong>等势</strong>——点一样多。</p>
+      <p class="a p"><strong>一个小陷阱：</strong>端点 1/3 = 0.1000…（三进制）里有数字 1，可它在 <em>C</em> 里。<strong>并不会矛盾</strong>——同一个数可以有两种展开，写成 0.0222… 就没有 1 了。这类「双重表示」的端点在处理分形时经常要单独小心（本章不是重点，但写代码时会撞上）。</p>
+      <p class="a p" style="color:var(--mut);font-size:13.6px">这两段合起来的结论很反直觉：<strong>长度为零的集合，可以和整个区间一样多。</strong>「多少」这件事，看你用哪把尺子量。</p>
+    </div>
+    <div class="pfoot">§11.2 康托尔集</div>
+  </section>
+
+  <!-- ========== 05b 康托尔尘 ========== -->
+  <section class="page" data-title="§11.2 · 康托尔尘与它的高维亲戚">
+    <div class="page-inner">
+      <div class="a kicker">§11.2 · 推广</div>
+      <h2 class="a">把「删中间」搬到正方形里</h2>
+      <p class="a p">康托尔集是把一维线段的中间删掉。把同样的动作搬到<strong>正方形</strong>里：分成 3×3 = 9 个小格，删掉中间那个（以及四条边上的中间格？）——常见的两种做法：</p>
+      <p class="a p">· 只留四个角格 → 4 份、每份 1/3 大 ⇒ D = ln4/ln3 = <strong>1.2619</strong>（这叫<strong>康托尔尘</strong>）；<br>
+         · 删掉中心那一个格 → 8 份、每份 1/3 大 ⇒ D = ln8/ln3 = <strong>1.8928</strong>（这是谢尔宾斯基地毯的开头一步）。</p>
+      <p class="a p">再往上一维：立方体分 27 格、只留 8 个角 ⇒ D = ln8/ln3 = 1.8928——和上面地毯同一个数，因为「份数与缩小比」相同。<strong>维数只由这两个数决定</strong>，与你在几维空间里画它无关。</p>
+      <div class="a card" style="margin-top:14px;border-color:rgba(98,208,255,.3)">
+        <h4 style="color:#bfe6ff">为什么这件事重要</h4>
+        <p>它说明：<strong>维数不是「外部空间给的」，而是集合自己长出来的</strong>。一个住在三维里的集合，维数可以是 1.89、也可以是 0.63。所以第 9 章那个「体积为零的吸引子」并不奇怪——它只是一个维数约 2 的集合被塞进了三维空间。</p>
+      </div>
+      <p class="a p" style="margin-top:12px;color:var(--mut);font-size:13.6px">术语提醒：「康托尔集」（一维，删中间三分之一）、「康托尔尘」（二维四角版）常被混着叫；报维数时请把 <em>m</em> 与 <em>r</em> 写出来，最不容易出错。</p>
+    </div>
+    <div class="pfoot">§11.2 康托尔集</div>
+  </section>
+
+  <!-- ========== 06 自相似维数 ========== -->
+  <section class="page" data-title="§11.3 · 自相似维数：D = ln m / ln(1/r)">
+    <div class="page-inner">
+      <div class="split">
+        <div>
+          <div class="a kicker">§11.3 · 自相似分形的维数</div>
+          <h2 class="a">一份变几份，就能算出维数</h2>
+          <p class="a p">若一个集合由 <em>m</em> 个<strong>一模一样</strong>的缩小副本拼成，每个副本是原来的 1/<em>r</em> 倍（<em>r</em> &gt; 1），就称它<strong>自相似</strong>。这时维数由一条「守恒式」给定：</p>
+          <span class="formula">m · (1/r)<sup>D</sup> = 1　⇒　D = ln m / ln r</span>
+          <p class="a p">直觉：总「容量」按 (1/<em>r</em>)<sup>D</sup> 缩水，一共 <em>m</em> 份，缩完正好拼回原来的大小，所以乘积必须是 1。</p>
+          <p class="a p">验证一下这条式子在熟悉的对象上是对的：</p>
+          <p class="a p">· 线段：<em>m</em> = 2、<em>r</em> = 2 ⇒ D = ln2/ln2 = <strong>1</strong> ✓<br>
+             · 正方形：切成 4 份、每份 1/2 ⇒ D = ln4/ln2 = <strong>2</strong> ✓<br>
+             · 立方体：8 份、1/2 ⇒ D = <strong>3</strong> ✓</p>
+          <p class="a p"><strong>退化自检过了</strong>：对一切整数维的对象，公式给回整数。所以它不是新发明，而是「维数」这个概念的推广。</p>
+        </div>
+        <div class="a card" style="align-self:center">
+          <h4>三个经典例子（本章数值生成）</h4>
+          <p style="line-height:2">· 康托尔集：2 份、1/3 大<br>
+             　D = ln2/ln3 = <strong>0.6309</strong><br>
+             · 科赫曲线：4 份、1/3 大<br>
+             　D = ln4/ln3 = <strong>1.2619</strong><br>
+             · 谢尔宾斯基三角形：3 份、1/2 大<br>
+             　D = ln3/ln2 = <strong>1.5850</strong></p>
+          <p style="margin-top:8px">三个都不是整数。这就是「分形」这个词的数学含义：<strong>维数是分数的集合</strong>。</p>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§11.3 自相似分形的维数</div>
+  </section>
+
+  <!-- ========== 07 三例图 ========== -->
+  <section class="page" data-title="§11.3 · 三个自相似集合">
+    <div class="page-inner">
+      <div class="a fig">
+        <svg viewBox="0 0 480 320" role="img" aria-label="自相似三例与它们的维数"><path d="M30.0 74 L33.4 74" fill="none" stroke="#62d0ff" stroke-width="3.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M38.9 74 L42.3 74" fill="none" stroke="#62d0ff" stroke-width="3.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M56.7 74 L60.1 74" fill="none" stroke="#62d0ff" stroke-width="3.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M65.6 74 L69.0 74" fill="none" stroke="#62d0ff" stroke-width="3.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M110.0 74 L113.4 74" fill="none" stroke="#62d0ff" stroke-width="3.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M118.9 74 L122.3 74" fill="none" stroke="#62d0ff" stroke-width="3.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M136.7 74 L140.1 74" fill="none" stroke="#62d0ff" stroke-width="3.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><path d="M145.6 74 L149.0 74" fill="none" stroke="#62d0ff" stroke-width="3.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><text x="90.0" y="50.0" fill="rgba(139,149,164,.95)" font-size="9.2" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">D = ln2/ln3 ≈ 0.631</text><text x="90.0" y="92.0" fill="rgba(139,149,164,.8)" font-size="8.8" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">两份，每份 1/3 大</text><path d="M170.0 74.0 L174.8 74.0 L177.2 69.8 L179.6 74.0 L184.4 74.0 L186.9 69.8 L184.4 65.7 L189.3 65.7 L191.7 61.5 L194.1 65.7 L198.9 65.7 L196.5 69.8 L198.9 74.0 L203.7 74.0 L206.1 69.8 L208.5 74.0 L213.3 74.0 L215.7 69.8 L213.3 65.7 L218.1 65.7 L220.6 61.5 L218.1 57.3 L213.3 57.3 L215.7 53.2 L213.3 49.0 L218.1 49.0 L220.6 44.8 L223.0 49.0 L227.8 49.0 L230.2 44.8 L227.8 40.6 L232.6 40.6 L235.0 36.5 L237.4 40.6 L242.2 40.6 L239.8 44.8 L242.2 49.0 L247.0 49.0 L249.4 44.8 L251.9 49.0 L256.7 49.0 L254.3 53.2 L256.7 57.3 L251.9 57.3 L249.4 61.5 L251.9 65.7 L256.7 65.7 L254.3 69.8 L256.7 74.0 L261.5 74.0 L263.9 69.8 L266.3 74.0 L271.1 74.0 L273.5 69.8 L271.1 65.7 L275.9 65.7 L278.3 61.5 L280.7 65.7 L285.6 65.7 L283.1 69.8 L285.6 74.0 L290.4 74.0 L292.8 69.8 L295.2 74.0 L300.0 74.0" fill="none" stroke="#4fbfa8" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><text x="235.0" y="50.0" fill="rgba(139,149,164,.95)" font-size="9.2" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">D = ln4/ln3 ≈ 1.262</text><text x="235.0" y="92.0" fill="rgba(139,149,164,.8)" font-size="8.8" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">四份，每份 1/3 大</text><path d="M320.0 160.0 L334.8 160.0 L327.4 147.2 Z" fill="none" stroke="#e8b04b" stroke-width="0.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><path d="M334.8 160.0 L349.5 160.0 L342.1 147.2 Z" fill="none" stroke="#e8b04b" stroke-width="0.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><path d="M327.4 147.2 L342.1 147.2 L334.8 134.5 Z" fill="none" stroke="#e8b04b" stroke-width="0.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><path d="M349.5 160.0 L364.2 160.0 L356.9 147.2 Z" fill="none" stroke="#e8b04b" stroke-width="0.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><path d="M364.2 160.0 L379.0 160.0 L371.6 147.2 Z" fill="none" stroke="#e8b04b" stroke-width="0.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><path d="M356.9 147.2 L371.6 147.2 L364.2 134.5 Z" fill="none" stroke="#e8b04b" stroke-width="0.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><path d="M334.8 134.5 L349.5 134.5 L342.1 121.7 Z" fill="none" stroke="#e8b04b" stroke-width="0.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><path d="M349.5 134.5 L364.2 134.5 L356.9 121.7 Z" fill="none" stroke="#e8b04b" stroke-width="0.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><path d="M342.1 121.7 L356.9 121.7 L349.5 108.9 Z" fill="none" stroke="#e8b04b" stroke-width="0.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><path d="M379.0 160.0 L393.8 160.0 L386.4 147.2 Z" fill="none" stroke="#e8b04b" stroke-width="0.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><path d="M393.8 160.0 L408.5 160.0 L401.1 147.2 Z" fill="none" stroke="#e8b04b" stroke-width="0.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><path d="M386.4 147.2 L401.1 147.2 L393.8 134.5 Z" fill="none" stroke="#e8b04b" stroke-width="0.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><path d="M408.5 160.0 L423.2 160.0 L415.9 147.2 Z" fill="none" stroke="#e8b04b" stroke-width="0.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><path d="M423.2 160.0 L438.0 160.0 L430.6 147.2 Z" fill="none" stroke="#e8b04b" stroke-width="0.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><path d="M415.9 147.2 L430.6 147.2 L423.2 134.5 Z" fill="none" stroke="#e8b04b" stroke-width="0.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><path d="M393.8 134.5 L408.5 134.5 L401.1 121.7 Z" fill="none" stroke="#e8b04b" stroke-width="0.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><path d="M408.5 134.5 L423.2 134.5 L415.9 121.7 Z" fill="none" stroke="#e8b04b" stroke-width="0.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><path d="M401.1 121.7 L415.9 121.7 L408.5 108.9 Z" fill="none" stroke="#e8b04b" stroke-width="0.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><path d="M349.5 108.9 L364.2 108.9 L356.9 96.1 Z" fill="none" stroke="#e8b04b" stroke-width="0.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><path d="M364.2 108.9 L379.0 108.9 L371.6 96.1 Z" fill="none" stroke="#e8b04b" stroke-width="0.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><path d="M356.9 96.1 L371.6 96.1 L364.2 83.4 Z" fill="none" stroke="#e8b04b" stroke-width="0.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><path d="M379.0 108.9 L393.8 108.9 L386.4 96.1 Z" fill="none" stroke="#e8b04b" stroke-width="0.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><path d="M393.8 108.9 L408.5 108.9 L401.1 96.1 Z" fill="none" stroke="#e8b04b" stroke-width="0.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><path d="M386.4 96.1 L401.1 96.1 L393.8 83.4 Z" fill="none" stroke="#e8b04b" stroke-width="0.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><path d="M364.2 83.4 L379.0 83.4 L371.6 70.6 Z" fill="none" stroke="#e8b04b" stroke-width="0.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><path d="M379.0 83.4 L393.8 83.4 L386.4 70.6 Z" fill="none" stroke="#e8b04b" stroke-width="0.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><path d="M371.6 70.6 L386.4 70.6 L379.0 57.8 Z" fill="none" stroke="#e8b04b" stroke-width="0.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/><text x="395.0" y="50.0" fill="rgba(139,149,164,.95)" font-size="9.2" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">D = ln3/ln2 ≈ 1.585</text><text x="395.0" y="182.0" fill="rgba(139,149,164,.8)" font-size="8.8" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">三份，每份 1/2 大</text><text x="240.0" y="190.0" fill="#f2ecdf" font-size="10.5" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">三者共用一条公式：D = ln(份数) / ln(1/缩小比)</text><text x="240.0" y="216.0" fill="rgba(139,149,164,.95)" font-size="9.4" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">康托尔 2/(3) → 0.631；科赫 4/3 → 1.262；谢尔宾斯基 3/2 → 1.585</text><text x="240.0" y="246.0" fill="rgba(139,149,164,.9)" font-size="9.4" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">注意 D 不是整数：它是「量的标度关系」给出的，不是数坐标轴的个数</text><text x="240.0" y="274.0" fill="rgba(139,149,164,.75)" font-size="8.8" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">画图用：康托尔第 3 级、科赫第 3 级、谢尔宾斯基第 3 级（都是数值生成）</text></svg>
+        <div class="figcap">三个自相似集合（都由脚本数值生成，不是手绘示意图）：左边康托尔集第 3 级，中间科赫曲线第 3 级，右边谢尔宾斯基三角形第 3 级。三者的维数分别是 0.631、1.262、1.585——从「比线还少」到「比线多、比面少」。</div>
+      </div>
+      <p class="a p" style="margin-top:14px">把这三种「分数维」放在一条尺子上看就明白了：</p>
+      <p class="a p" style="line-height:2">0（一个点）→ <strong>0.63 康托尔集</strong> → 1（线）→ <strong>1.26 科赫曲线</strong> → <strong>1.58 谢尔宾斯基</strong> → 2（面）</p>
+      <p class="a p" style="color:var(--mut);font-size:13.6px">读法：维数在 1 与 2 之间的集合，「比线更占地方，但还没铺满一个面」。这在老几何里是矛盾的——正因为如此，Mandelbrot 才给它们起了「分形」这个名字（维数不是整数）。<strong>名字是描述，不是定义</strong>：严格的判据仍然是维数。</p>
+    </div>
+    <div class="pfoot">§11.3 自相似分形的维数</div>
+  </section>
+
+  <!-- ========== 08 盒维数 ========== -->
+  <section class="page" data-title="§11.4 · 盒维数：数盒子">
+    <div class="page-inner">
+      <div class="a kicker">§11.4 · 盒维数</div>
+      <h2 class="a">画不出自相似，也能量</h2>
+      <p class="a p">对康托尔集这种规矩图形，「几份、多小」一眼可见。可奇怪吸引子根本没这么规矩，你怎么说它「由 <em>m</em> 份组成」？<strong>盒计数</strong>把公式换成一句能执行的话：</p>
+      <div class="a card" style="border-color:rgba(98,208,255,.32);margin:12px 0">
+        <p>用边长 ε 的盒子（网格）盖住集合，数出至少含一个点的盒子个数 <em>N</em>(ε)；若</p>
+        <p style="text-align:center;font-family:var(--serif);font-size:15.5px;padding:8px 0">N(ε) ∝ ε<sup>−D</sup>（ε → 0）</p>
+        <p>则指数 <strong>D</strong> 就是<strong>盒维数</strong>：D = −lim<sub>ε→0</sub> ln <em>N</em>(ε) / ln ε。</p>
+      </div>
+      <p class="a p">实操就是画一张 <strong>log <em>N</em> 对 log(1/ε) 的图</strong>，取直线的斜率。本章脚本对康托尔集（第 14 级，16384 段）取 ε = 3<sup>−k</sup>、k = 1…9，测得的斜率是 <strong>0.630930</strong>，与 ln2/ln3 = 0.630930 相同（四舍五入到四位是 0.6309）。这不是巧合：对自相似集，盒计数与自相似维数<strong>必然相等</strong>（推导见本章最后一篇）。</p>
+      <p class="a p" style="color:var(--mut);font-size:13.6px">为什么取 ε = 3<sup>−k</sup>：因为康托尔集在 1/3 的整数次幂尺度上最「规整」，其它 ε 会看到台阶状的涨落。这一条在选择尺度时很重要——选错尺度，直线就不直。</p>
+    </div>
+    <div class="pfoot">§11.4 盒维数</div>
+  </section>
+
+  <!-- ========== 09 盒计数图 ========== -->
+  <section class="page" data-title="§11.4 · 两条双对数直线">
+    <div class="page-inner">
+      <div class="a fig">
+        <svg viewBox="0 0 480 320" role="img" aria-label="盒计数：康托尔集与洛伦兹吸引子"><path d="M60.0 250.0 L220.0 250.0" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><path d="M60.0 250.0 L60.0 62.0" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><path d="M60.0 250.0 L80.0 226.5 L100.0 203.0 L120.0 179.5 L140.0 156.0 L160.0 132.5 L180.0 109.0 L200.0 85.5 L220.0 62.0" fill="none" stroke="#62d0ff" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><circle cx="60.0" cy="250.0" r="2.6" fill="#62d0ff"/><circle cx="80.0" cy="226.5" r="2.6" fill="#62d0ff"/><circle cx="100.0" cy="203.0" r="2.6" fill="#62d0ff"/><circle cx="120.0" cy="179.5" r="2.6" fill="#62d0ff"/><circle cx="140.0" cy="156.0" r="2.6" fill="#62d0ff"/><circle cx="160.0" cy="132.5" r="2.6" fill="#62d0ff"/><circle cx="180.0" cy="109.0" r="2.6" fill="#62d0ff"/><circle cx="200.0" cy="85.5" r="2.6" fill="#62d0ff"/><circle cx="220.0" cy="62.0" r="2.6" fill="#62d0ff"/><path d="M60.0 250.0 L220.0 62.0" fill="none" stroke="#e8b04b" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.85" stroke-dasharray="5 4"/><text x="140.0" y="50.0" fill="#f2ecdf" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">盒计数（康托尔集）：斜率 0.631</text><text x="140.0" y="272.0" fill="#8b95a4" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">log(1/ε)</text><text x="52.0" y="68.0" fill="#8b95a4" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="end">log N</text><path d="M300.0 250.0 L452.0 250.0" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><path d="M300.0 250.0 L300.0 62.0" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><path d="M300.0 250.0 L322.8 219.9 L347.6 189.5 L367.3 164.7 L392.2 133.6 L411.8 109.0 L434.7 81.5 L452.0 62.0" fill="none" stroke="#4fbfa8" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><circle cx="300.0" cy="250.0" r="2.6" fill="#4fbfa8"/><circle cx="322.8" cy="219.9" r="2.6" fill="#4fbfa8"/><circle cx="347.6" cy="189.5" r="2.6" fill="#4fbfa8"/><circle cx="367.3" cy="164.7" r="2.6" fill="#4fbfa8"/><circle cx="392.2" cy="133.6" r="2.6" fill="#4fbfa8"/><circle cx="411.8" cy="109.0" r="2.6" fill="#4fbfa8"/><circle cx="434.7" cy="81.5" r="2.6" fill="#4fbfa8"/><circle cx="452.0" cy="62.0" r="2.6" fill="#4fbfa8"/><path d="M300.0 250.0 L452.0 61.9" fill="none" stroke="#e8b04b" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.85" stroke-dasharray="5 4"/><text x="376.0" y="50.0" fill="#f2ecdf" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">盒计数（洛伦兹）：斜率 1.81</text><text x="376.0" y="272.0" fill="#8b95a4" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">log(1/ε)</text><text x="292.0" y="68.0" fill="#8b95a4" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="end">log N</text><text x="240.0" y="16.0" fill="#8b95a4" font-size="9.8" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">同一个动作，量两个集合：数「边长为 ε 的盒子」占多少个</text><text x="240.0" y="296.0" fill="rgba(139,149,164,.95)" font-size="9.2" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">两张图的横轴都是 log(1/ε)、纵轴都是 log N；斜率就是盒维数</text></svg>
+        <div class="figcap">左：康托尔集的盒计数（9 个尺度，斜率 0.6309 = ln2/ln3）。右：洛伦兹吸引子的关联维数（3000 个点、7 个尺度 r，斜率 D₂ ≈ 2.02）。两张图都是 log-log，直线斜率就是维数。</div>
+      </div>
+      <p class="a p" style="margin-top:14px"><strong>右图说明的是另一件事：</strong>奇怪吸引子没有「份数」可数，但它有点对。<em>C</em>(<em>r</em>) 定义为「随机取两点、距离小于 <em>r</em> 的概率」，若它也按幂律走，斜率就是<strong>关联维数</strong> D₂（§11.5）。</p>
+      <p class="a p"><strong>这两个数<em>不必</em>相等：</strong>对洛伦兹吸引子，本章用 3000 点测 D₂ = 2.02；用 12 万点做三维盒计数测到 1.81。理论上只有 <strong>D₂ ≤ D₀</strong> 这条不等式，没有等号；这 0.2 的差距里既有这条不等式，也有有限采样偏差——盒计数在稀疏区域要被很多点才统计到，点数不够就偏低。下一页专门讲这件事。</p>
+      <p class="a p" style="color:var(--mut);font-size:13.6px">这也解释了为什么做维数要「报参数」：<strong>点数、尺度范围、拟合区间</strong>换一下，第三位小数就会变。审稿人问维数时，先问这三个。</p>
+      <p class="a p"><strong>为什么「直线」这件事本身就值得一说：</strong>双对数下是直线，等价于 <em>N</em>(ε) ∝ ε<sup>−D</sup> 对所有尺度都成立——也就是<strong>没有特征尺度</strong>。这正是分形与「一般的粗糙物体」的分界：一块石头有颗粒尺度，放大到那里直线就断了；康托尔集在任何一级放大都长一个样，直线一直延下去。所以「无标度」比「自相似」更接近本质，也更适合用标度指数（维数）来描述。</p>
+    </div>
+    <div class="pfoot">§11.4 盒维数</div>
+  </section>
+
+  <!-- ========== 10 盒计数的坑 ========== -->
+  <section class="page" data-title="§11.4 · 盒计数的三个坑">
+    <div class="page-inner">
+      <div class="a kicker">§11.4 · 实操</div>
+      <h2 class="a">直线不直的时候，别硬拟合</h2>
+      <div class="split" style="margin-top:12px;gap:14px">
+        <div>
+          <div class="a card" style="margin-bottom:10px;border-color:rgba(217,83,74,.34)">
+            <h4 style="color:#ffb4a6">坑一：点数不够</h4>
+            <p>盖住 <em>N</em> 个盒子至少要 <em>N</em> 个点。若点数与盒子数同量级，<em>N</em>(ε) 会被「点的个数」卡住，斜率被拉低——本章洛伦兹三维盒计数 1.81 就是这么来的（点不够）。</p>
+          </div>
+          <div class="a card" style="margin-bottom:10px">
+            <h4>坑二：尺度范围太窄</h4>
+            <p>吸引子的特征尺度只有一两个量级，很难画出「长直线」。至少要跨越 1.5 个量级，斜率才稳定。</p>
+          </div>
+          <div class="a card">
+            <h4>坑三：均匀 ≠ 非均匀</h4>
+            <p>盒计数只看「有没有点」，不看「有多少点」。所以它对<strong>非均匀分布不敏感</strong>；要抓非均匀，得用点态维数或关联维数（§11.5）。</p>
+          </div>
+        </div>
+        <div class="a card" style="align-self:center;border-color:rgba(232,176,75,.36)">
+          <h4 style="color:#f3d79a">本章的实测数字（可复算）</h4>
+          <p style="font:12px/1.95 var(--mono);color:var(--mut)">
+            康托尔箱计数（16384 段）<br>
+            　ε=1/3 … 1/3⁹　斜率 <b style="color:#62d0ff">0.6309</b><br><br>
+            洛伦兹三维盒计数（12 万点）<br>
+            　ε=5 … 0.5　N：190 → 12171<br>
+            　斜率 <b>1.81</b><br><br>
+            洛伦兹关联维数（3000 点）<br>
+            　r=1.5 … 10　斜率 <b style="color:#62d0ff">2.02</b>
+          </p>
+          <p style="margin-top:8px">两个洛伦兹的数差 0.2：前者是<strong>几何</strong>量（数盒子），后者是<strong>测度</strong>量（数点对）。对非均匀吸引子，它们本来就可以不同。</p>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§11.4 盒维数</div>
+  </section>
+
+  <!-- ========== 11 演示 01 ========== -->
+  <section class="page" data-title="§11.4 · 网格对齐不能忽视">
+    <div class="page-inner">
+      <div class="a kicker">§11.4 · 实操细节</div>
+      <h2 class="a">网格往哪儿摆，会改变第三位小数</h2>
+      <p class="a p">盒计数看起来无懈可击，但有一个隐蔽的自由度：<strong>网格的原点放在哪儿</strong>。同一集合，同一 ε，网格平移半个盒子，占用的盒子数就可能变——尤其在点数不多、边缘稀疏的时候。</p>
+      <div class="split" style="margin-top:12px;gap:14px">
+        <div class="a card">
+          <h4>怎么减小这个偏差</h4>
+          <p>① 用<strong>多个网格偏移</strong>各算一次再平均（代价是 ε 次计算）；<br>
+             ② 优先选与集合「同构」的尺度（康托尔集用 ε = 3<sup>−k</sup>，本章就是这么做的）；<br>
+             ③ 拟合时丢掉最小的一段（点数不够）与最大的一段（整体形状主导）。</p>
+        </div>
+        <div class="a card" style="border-color:rgba(255,151,112,.34)">
+          <h4 style="color:#ffc3ad">对连续吸引子还要更小心</h4>
+          <p>真实吸引子是连续集，你手上只有离散采样点。<strong>「盒子里有点」的判据</strong>在稀疏区会被点数卡住：明明集合经过，可样本里恰好没有点。这就是本章洛伦兹盒计数偏低（1.81）的主要来源。</p>
+        </div>
+      </div>
+      <p class="a p" style="margin-top:16px"><strong>一个可操作的判断：</strong>把点数加倍重算一次。如果维数明显升高，说明之前被点数卡住了；如果基本不变，那次测量才可信。这一招比任何拟合优度都实在。</p>
+      <p class="a p" style="color:var(--mut);font-size:13.6px">与 §11.5 的关系：关联维数对网格完全不敏感（它只用点对距离），所以在点数有限时往往更可靠——这也是它成为工程首选的原因。</p>
+    </div>
+    <div class="pfoot">§11.4 盒维数</div>
+  </section>
+
+  <!-- ========== 11c 演示 01 ========== -->
+  <section class="page" data-title="演示 01 · 盒计数：亲手数一遍" data-steps="3" data-hook="boxcount">
+    <div class="page-inner">
+      <div class="split" style="grid-template-columns:1.1fr .9fr">
+        <div class="a demo">
+          <canvas id="cv1" height="380"></canvas>
+          <div class="ctrls">
+            <div class="slider"><span>尺度 k</span>
+              <input type="range" id="p1" min="1" max="6" step="1" value="2"><b id="p1v">1/9</b></div>
+            <button class="btn" id="reset1">重置</button>
+          </div>
+          <div class="readout" id="ro1"></div>
+        </div>
+        <div class="a">
+          <div class="steps" id="st1">
+            <div class="step on">
+              <div class="snum">01 / 03 · ε = 1/9</div>
+              <h3>粗尺子：4 个盒子</h3>
+              <p>盒子这么大时，康托尔集只落进 4 个盒子。<strong>N = 4 = 2²</strong>——不是巧合：第 k 级尺度下，占用的盒子数恰好是 2<sup>k</sup>。</p>
+            </div>
+            <div class="step">
+              <div class="snum">02 / 03 · ε = 1/27</div>
+              <h3>细一点：8 个盒子</h3>
+              <p>盒子缩小 3 倍，占用数变成 2 倍。<strong>3 倍细 → 2 倍多</strong>，这个「不对等的比例」就是维数的来源：3<sup>D</sup> = 2，D = ln2/ln3。</p>
+            </div>
+            <div class="step">
+              <div class="snum">03 / 03 · ε = 1/81</div>
+              <h3>log-log 图上的点连成直线</h3>
+              <p>右下小图的蓝点每加一级就多一个，它们排成一条直线，斜率 0.631——<strong>金虚线就是 ln2/ln3</strong>。维数不是定义出来的，是这样量出来的。</p>
+            </div>
+          </div>
+          <div class="sdots" id="sd1"><i class="on"></i><i></i><i></i></div>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§11.4 盒维数</div>
+  </section>
+
+  <!-- ========== 11b IFS ========== -->
+  <section class="page" data-title="§11.3 · 迭代函数系统：K 个映射就是一条规则">
+    <div class="page-inner">
+      <div class="a kicker">§11.3 · 迭代函数系统（IFS）</div>
+      <h2 class="a">把「自相似」写成一组映射</h2>
+      <p class="a p">上一页的「<em>m</em> 份副本」可以写成数学：给一组压缩映射 <em>S</em>₁, …, <em>S</em><sub>K</sub>（每个都把距离缩小 <em>r</em> 倍以内），它们的<strong>不变集</strong> <em>A</em> 满足</p>
+      <span class="formula">A = S₁(A) ∪ S₂(A) ∪ … ∪ S<sub>K</sub>(A)</span>
+      <p class="a p">这样的 <em>A</em> 唯一存在（压缩映射定理的直接推论：在「紧集」这个空间上，集合算子也是压缩的）。这就是<strong>迭代函数系统</strong>（iterated function system, IFS）。</p>
+      <p class="a p">如果所有 <em>S</em><sub>i</sub> 的缩小比都是 1/<em>r</em>，那么 <em>A</em> 的维数就是 <em>D</em> = ln <em>K</em>/ln <em>r</em>。<strong>演示 02 的「混沌游戏」正是它的随机算法</strong>：随便从哪儿出发，反复「随机挑一个 <em>S</em><sub>i</sub> 应用一次」，点会自动落进 <em>A</em> 并铺满它——不需要知道 <em>A</em> 长什么样。</p>
+      <div class="a card" style="margin-top:14px;border-color:rgba(232,176,75,.36)">
+        <h4 style="color:#f3d79a">两个必须带上的条件</h4>
+        <p>① <strong>开集条件</strong>：副本之间不能重叠得太厉害，否则 <em>D</em> = ln <em>K</em>/ln <em>r</em> 会高估（重叠部分的盒子只算一次）。<br>
+           ② <strong>概率要单独给</strong>：混沌游戏里「挑哪个 <em>S</em><sub>i</sub>」的概率 <em>p</em><sub>i</sub> 不影响集合 <em>A</em>，却决定点在 <em>A</em> 上怎么分布——也就是决定 D₂ 与点态维数的分布。</p>
+      </div>
+      <p class="a p" style="margin-top:12px;color:var(--mut);font-size:13.6px">最后这一点很重要：<strong>集合与测度是两件事</strong>。同一个谢尔宾斯基三角，换个概率分布，D₀ 不变、D₂ 却会变。第 12 章的重构只保证「集合对」，不保证「密度对」。</p>
+    </div>
+    <div class="pfoot">§11.3 自相似分形的维数</div>
+  </section>
+
+  <!-- ========== 12 点态维数 ========== -->
+  <section class="page" data-title="§11.5 · 点态维数：每一点都不一样">
+    <div class="page-inner">
+      <div class="split rev">
+        <div class="a fig">
+          <svg viewBox="0 0 480 320" role="img" aria-label="点态维数的分布"><rect x="46.8" y="254.0" width="13.6" height="0.0" fill="#4fbfa8" opacity=".6"/><rect x="62.0" y="254.0" width="13.6" height="0.0" fill="#4fbfa8" opacity=".6"/><rect x="77.3" y="254.0" width="13.6" height="0.0" fill="#4fbfa8" opacity=".6"/><rect x="92.5" y="254.0" width="13.6" height="0.0" fill="#4fbfa8" opacity=".6"/><rect x="107.7" y="254.0" width="13.6" height="0.0" fill="#4fbfa8" opacity=".6"/><rect x="123.0" y="254.0" width="13.6" height="0.0" fill="#4fbfa8" opacity=".6"/><rect x="138.2" y="254.0" width="13.6" height="0.0" fill="#4fbfa8" opacity=".6"/><rect x="153.4" y="254.0" width="13.6" height="0.0" fill="#4fbfa8" opacity=".6"/><rect x="168.6" y="254.0" width="13.6" height="0.0" fill="#4fbfa8" opacity=".6"/><rect x="183.9" y="254.0" width="13.6" height="0.0" fill="#4fbfa8" opacity=".6"/><rect x="199.1" y="223.1" width="13.6" height="30.9" fill="#4fbfa8" opacity=".6"/><rect x="214.3" y="165.6" width="13.6" height="88.4" fill="#4fbfa8" opacity=".6"/><rect x="229.6" y="94.9" width="13.6" height="159.1" fill="#4fbfa8" opacity=".6"/><rect x="244.8" y="64.0" width="13.6" height="190.0" fill="#4fbfa8" opacity=".6"/><rect x="260.0" y="103.8" width="13.6" height="150.2" fill="#4fbfa8" opacity=".6"/><rect x="275.3" y="183.3" width="13.6" height="70.7" fill="#4fbfa8" opacity=".6"/><rect x="290.5" y="174.5" width="13.6" height="79.5" fill="#4fbfa8" opacity=".6"/><rect x="305.7" y="209.8" width="13.6" height="44.2" fill="#4fbfa8" opacity=".6"/><rect x="321.0" y="231.9" width="13.6" height="22.1" fill="#4fbfa8" opacity=".6"/><rect x="336.2" y="240.7" width="13.6" height="13.3" fill="#4fbfa8" opacity=".6"/><rect x="351.4" y="240.7" width="13.6" height="13.3" fill="#4fbfa8" opacity=".6"/><rect x="366.6" y="240.7" width="13.6" height="13.3" fill="#4fbfa8" opacity=".6"/><rect x="381.9" y="254.0" width="13.6" height="0.0" fill="#4fbfa8" opacity=".6"/><rect x="397.1" y="254.0" width="13.6" height="0.0" fill="#4fbfa8" opacity=".6"/><rect x="412.3" y="249.6" width="13.6" height="4.4" fill="#4fbfa8" opacity=".6"/><rect x="427.6" y="249.6" width="13.6" height="4.4" fill="#4fbfa8" opacity=".6"/><path d="M46.0 254.0 L442.0 254.0" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.1" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><path d="M46.0 254.0 L46.0 56.0" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.1" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><text x="73.3" y="268.0" fill="#8b95a4" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">0.6</text><text x="127.9" y="268.0" fill="#8b95a4" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">1.0</text><text x="182.6" y="268.0" fill="#8b95a4" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">1.4</text><text x="237.2" y="268.0" fill="#8b95a4" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">1.8</text><text x="291.8" y="268.0" fill="#8b95a4" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">2.2</text><text x="346.4" y="268.0" fill="#8b95a4" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">2.6</text><text x="401.0" y="268.0" fill="#8b95a4" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">3.0</text><text x="442.0" y="268.0" fill="#8b95a4" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">3.3</text><path d="M267.0 254.0 L267.0 58.0" fill="none" stroke="#e8b04b" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.9" stroke-dasharray="5 4"/><text x="271.0" y="54.0" fill="#e8b04b" font-size="9.2" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="start">D2 ≈ 2.02</text><text x="240.0" y="18.0" fill="#8b95a4" font-size="9.8" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">点态维数 α 的分布：同一个吸引子上，每一点的局部维数都不一样</text><text x="240.0" y="296.0" fill="rgba(139,149,164,.95)" font-size="9.4" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">分布宽 ⇒ 吸引子上的点分布不均匀；这就是「点态维数」要引入的原因</text><text x="36.0" y="54.0" fill="#8b95a4" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="end">计数</text><text x="438.0" y="284.0" fill="#8b95a4" font-size="9.4" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="end">α</text></svg>
+          <div class="figcap">洛伦兹吸引子上 200 个采样点的局部标度指数 α（用 r = 2 与 r = 6 两个尺度估计）。中位数 1.95，范围 1.52–3.25。<strong>分布有宽度</strong>——这就是「非均匀」的直接证据。</div>
+        </div>
+        <div>
+          <div class="a kicker">§11.5 · 点态维数</div>
+          <h2 class="a">同一个吸引子，各处的局部维数不同</h2>
+          <p class="a p">盒维数给整个集合一个数，像是假设集合「处处一样密」。奇怪吸引子不是这样：有些区域轨道反复经过（密集），有些很少光顾（稀疏）。</p>
+          <p class="a p">于是定义<strong>点态维数</strong>：盯住集合上的一个点 <em>x</em>，数以它为圆心、半径 <em>r</em> 的球里有多少点 <em>N</em><sub>x</sub>(<em>r</em>)，若</p>
+          <span class="formula">N<sub>x</sub>(r) ∝ r<sup>α(x)</sup>（r → 0）</span>
+          <p class="a p">则 α(<em>x</em>) 就是这一点处的局部维数。它<strong>随 x 变化</strong>，于是整个集合的「维数」其实是一个<strong>分布</strong>，不是一个数。</p>
+          <p class="a p">本章的做法（两尺度估计）：α ≈ ln[<em>N</em><sub>x</sub>(6)/<em>N</em><sub>x</sub>(2)] / ln(6/2)。200 个点算下来，中位数 1.95，但两端的点能到 1.5 或 3 以上。<strong>平均值≈D₂，但每一点的局部行为差很多。</strong></p>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§11.5 点态维数与关联维数</div>
+  </section>
+
+  <!-- ========== 13 关联维数 ========== -->
+  <section class="page" data-title="§11.5 · 关联维数：数点对">
+    <div class="page-inner">
+      <div class="split">
+        <div>
+          <div class="a kicker">§11.5 · 关联维数（Grassberger–Procaccia）</div>
+          <h2 class="a">不去管局部，直接数「近邻对」</h2>
+          <p class="a p">点态维数要一个点一个点地估计，噪声大、计算贵。Grassberger 与 Procaccia 的办法聪明得多：<strong>把所有点对的距离都数一遍</strong>。</p>
+          <span class="formula" style="font-size:14px">C(r) = (2/[N(N−1)]) · #{ i&lt;j : |x<sub>i</sub> − x<sub>j</sub>| &lt; r }</span>
+          <p class="a p">C(<em>r</em>) 就是「随机取两点、距离小于 <em>r</em>」的概率。若它按幂律走，斜率就是<strong>关联维数</strong> D₂ = lim ln C(<em>r</em>)/ln <em>r</em>。</p>
+          <p class="a p">本章：3000 个洛伦兹点、7 个尺度（<em>r</em> = 1.5 … 10）得到 <strong>D₂ ≈ 2.02</strong>；只用两两距离，<strong>不需要网格</strong>，所以对网格偏移免疫。</p>
+          <p class="a p" style="color:var(--mut);font-size:13.4px">关系：一般有 D₂ ≤ D₁ ≤ D₀。等号意味着分布足够均匀；洛伦兹的 2.02（D₂）与 1.81（D₀）就是不等号的有限采样版本（见前一页的说明）。</p>
+        </div>
+        <div class="a fig">
+          <svg viewBox="0 0 480 320" role="img" aria-label="关联维数：ln C(r) 对 ln r"><path d="M66.0 250.0 L446.0 250.0" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><path d="M66.0 250.0 L66.0 66.0" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/><path d="M66.0 250.0 L123.6 220.4 L191.0 185.9 L262.5 149.9 L326.3 119.1 L388.4 90.5 L446.0 66.0" fill="none" stroke="#62d0ff" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/><circle cx="66.0" cy="250.0" r="2.6" fill="#62d0ff"/><circle cx="123.6" cy="220.4" r="2.6" fill="#62d0ff"/><circle cx="191.0" cy="185.9" r="2.6" fill="#62d0ff"/><circle cx="262.5" cy="149.9" r="2.6" fill="#62d0ff"/><circle cx="326.3" cy="119.1" r="2.6" fill="#62d0ff"/><circle cx="388.4" cy="90.5" r="2.6" fill="#62d0ff"/><circle cx="446.0" cy="66.0" r="2.6" fill="#62d0ff"/><path d="M66.0 250.0 L446.0 57.2" fill="none" stroke="#e8b04b" stroke-width="1.0" stroke-linejoin="round" stroke-linecap="round" opacity="0.85" stroke-dasharray="5 4"/><text x="256.0" y="54.0" fill="#f2ecdf" font-size="10" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">洛伦兹吸引子的关联维数：D₂ ≈ 2.02</text><text x="256.0" y="272.0" fill="#8b95a4" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">ln r</text><text x="58.0" y="72.0" fill="#8b95a4" font-size="9" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="end">ln C(r)</text><text x="240.0" y="16.0" fill="#8b95a4" font-size="9.8" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">关联维数（Grassberger–Procaccia）：把 ln C(r) 对 ln r 画出来</text><text x="240.0" y="296.0" fill="rgba(139,149,164,.95)" font-size="9.2" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-weight="500" text-anchor="middle">3000 个点、7 个尺度（r = 1.5 … 10）；斜率 = D₂</text></svg>
+          <div class="figcap">ln C(<em>r</em>) 对 ln <em>r</em>（3000 个点、7 个尺度）。金虚线是斜率 D₂ ≈ 2.02 的直线。纵轴从下往上增加，横轴从左往右增加——两个方向都取了对数，所以直线 = 幂律。</div>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§11.5 点态维数与关联维数</div>
+  </section>
+
+  <!-- ========== 13b 维数谱 ========== -->
+  <section class="page" data-title="§11.5 · 从点态维数到维数谱">
+    <div class="page-inner">
+      <div class="a kicker">§11.5 · 进阶：维数谱</div>
+      <h2 class="a">一个数不够，就画一条曲线</h2>
+      <p class="a p">上一页的直方图说明：点态维数 α 是个<strong>分布</strong>。那就把这个分布完整地记下来——对每个 α，问「局部维数等于 α 的那部分点，本身占多少维」？把这个「部分维数」叫做 <em>f</em>(α)，得到的曲线叫<strong>维数谱</strong>（多重分形的标准语言）。</p>
+      <div class="split" style="margin-top:12px;gap:14px">
+        <div class="a card">
+          <h4>几个可对照的极端</h4>
+          <p>· 分布<strong>完全均匀</strong>（比如 r = 4 的逻辑斯谛映射）：所有点 α 相同，<em>f</em>(α) 塌缩成一个点，<em>f</em> 的峰值就是 D₀。<br>
+             · 分布<strong>极不均匀</strong>（如洛伦兹、埃农）：曲线展开成拱形，峰值 = D₀，曲线越宽说明越「多标度」。</p>
+        </div>
+        <div class="a card" style="border-color:rgba(98,208,255,.3)">
+          <h4 style="color:#bfe6ff">怎么读它</h4>
+          <p>曲线的<strong>位置</strong>告诉你维数多大；曲线的<strong>宽度</strong>告诉你分布有多不均匀。只看 D₀ 时，这两样信息被压成了一个数——这就是为什么研究混沌的人常报整条曲线。</p>
+        </div>
+      </div>
+      <p class="a p" style="margin-top:16px">本章不做 <em>f</em>(α) 的数值：3000 个点远不够稳定地估计它（要先按 α 分层、再各层数盒子，点数需求是平方级的）。这里把它写出来，目的只有一个——让你知道「吸引子的维数」这件事在进阶层面长什么样，不至于把 D₀ 当成全部真相。</p>
+      <p class="a p" style="color:var(--mut);font-size:13.6px">边界：维数谱的定义依赖「分层数盒子」的极限，对有限点集只能做近似；不同的估计方法（盒计数、关联、点态）给不同的近似曲线，互相不能直接套算。</p>
+    </div>
+    <div class="pfoot">§11.5 点态维数与关联维数</div>
+  </section>
+
+  <!-- ========== 14 演示 02 ========== -->
+  <section class="page" data-title="演示 02 · 混沌游戏：K 个映射定下维数" data-steps="3" data-hook="chaosgame">
+    <div class="page-inner">
+      <div class="split" style="grid-template-columns:1.1fr .9fr">
+        <div class="a demo">
+          <canvas id="cv2" height="380"></canvas>
+          <div class="ctrls">
+            <div class="slider"><span>顶点数 K</span>
+              <input type="range" id="p2" min="2" max="4" step="1" value="3"><b id="p2v">3</b></div>
+            <button class="btn" id="reset2">撒点</button>
+          </div>
+          <div class="readout" id="ro2"></div>
+        </div>
+        <div class="a">
+          <div class="steps" id="st2">
+            <div class="step on">
+              <div class="snum">01 / 03 · K = 2</div>
+              <h3>两个顶点：一条线段</h3>
+              <p>每次只往两个顶点之一走一半。反复下来点铺满一条线段：<strong>2 份、每份 1/2</strong> ⇒ D = ln2/ln2 = 1。</p>
+            </div>
+            <div class="step">
+              <div class="snum">02 / 03 · K = 3</div>
+              <h3>三个顶点：谢尔宾斯基</h3>
+              <p>三角形中间永远是空的——因为落点总在两个顶点的中点。3 份、每份 1/2 ⇒ D = ln3/ln2 = <strong>1.585</strong>，介于线与面之间。</p>
+            </div>
+            <div class="step">
+              <div class="snum">03 / 03 · K = 4</div>
+              <h3>四个顶点：铺成一个面</h3>
+              <p>4 份、每份 1/2 ⇒ D = ln4/ln2 = <strong>2</strong>。同样的「缩一半」规则，只改顶点个数，维数就从 1 走到 2——<strong>m 决定维数</strong>。</p>
+            </div>
+          </div>
+          <div class="sdots" id="sd2"><i class="on"></i><i></i><i></i></div>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§11.3 自相似分形的维数</div>
+  </section>
+
+  <!-- ========== 15 推导 1 ========== -->
+  <section class="page" data-title="完整推导 1 · 自相似维数公式">
+    <div class="page-inner">
+      <div class="a kicker">PROOF 01 · 出发点 → 标度 → 解出 D → 自检 → 边界</div>
+      <h2 class="a">为什么 D = ln m / ln r</h2>
+      <details class="a" open style="margin-top:14px">
+        <summary><span class="tag blue">完整推导</span>从「盒子数随尺度怎么变」推出公式，并用康托尔集验算</summary>
+        <div class="body proofs">
+          <p><b>出发点．</b>用边长 ε 的盒子覆盖集合，N(ε) 为占用的盒子数。维数的定义式：N(ε) ∝ ε<sup>−D</sup>。</p>
+          <p><span class="stepnum">1</span><b>自相似意味着什么．</b>设集合由 <em>m</em> 个副本组成、每个副本是整体的 1/<em>r</em> 倍。用 ε 的盒子量整体，等价于用 ε·<em>r</em> 的盒子量<strong>每个副本</strong>（因为放大 r 倍后副本就成了整体）。所以</p>
+          <span class="formula">N(ε) = m · N(ε r)</span>
+          <p><b>合法性</b>：这一步要求副本之间「不重叠到有体积共享」的程度（严格说要求开集条件），否则盒子会被两个副本共用，计数偏小。</p>
+          <p><span class="stepnum">2</span><b>代定义式．</b>设 N(ε) = A ε<sup>−D</sup>，代入第 1 步：</p>
+          <span class="formula">A ε<sup>−D</sup> = m · A (ε r)<sup>−D</sup> = m A ε<sup>−D</sup> r<sup>−D</sup>　⇒　1 = m r<sup>−D</sup></span>
+          <p>即 m (1/r)<sup>D</sup> = 1，两边取对数：</p>
+          <span class="formula">D = ln m / ln r</span>
+          <p><span class="stepnum">3</span><b>用康托尔集验算．</b><em>m</em> = 2（左右两半），<em>r</em> = 3（每半是整体的 1/3）：D = ln2/ln3 = 0.63093。本章盒计数实测 0.6309 ✓</p>
+          <p><span class="stepnum">4</span><b>退化自检．</b>线段：m = 2, r = 2 ⇒ D = 1 ✓；正方体：m = 8, r = 2 ⇒ D = 3 ✓；单个点：m = 1 ⇒ D = 0 ✓（一个点量不出任何长度）。<b>对一切整数维对象，公式都回到整数</b>——这是它可信的最硬证据。</p>
+          <p><b>失效边界．</b>① 要求「严格自相似」：自然界的分形（海岸线、云）只是统计自相似，只能谈「在一定尺度范围内近似」。② 若副本之间有重叠（比如某些 IFS 里多个映射的像相交），公式要给「开集条件」才成立，否则要改用盒维数直接量。③ 这条公式不给点态信息：它只说整体，不说哪部分更密。</p>
+        </div>
+      </details>
+    </div>
+    <div class="pfoot">§11.3 自相似分形的维数</div>
+  </section>
+
+  <!-- ========== 16 推导 2 ========== -->
+  <section class="page" data-title="完整推导 2 · 盒维数为什么等于自相似维数">
+    <div class="page-inner">
+      <div class="a kicker">PROOF 02 · 两种定义的一致性</div>
+      <h2 class="a">「几份」与「数盒子」为什么给出同一个数</h2>
+      <details class="a" open style="margin-top:14px">
+        <summary><span class="tag blue">完整推导</span>先用 ε 与 ε·r 两档夹住 N(ε)，再取对数极限</summary>
+        <div class="body proofs">
+          <p><b>出发点．</b>自相似集 C = ⋃<sub>i=1</sub><sup>m</sup> S<sub>i</sub>(C)，每个 S<sub>i</sub> 是缩小 1/<em>r</em> 的相似变换。</p>
+          <p><span class="stepnum">1</span><b>上界．</b>每个副本 S<sub>i</sub>(C) 是整体的 1/<em>r</em> 倍；<strong>用边长 ε 的盒子盖它，等价于用边长 ε·<em>r</em> 的盒子盖整体</strong>（把副本放大 r 倍就变回整体，ε 也跟着放大 r 倍）。所以每个副本至多要 N(ε·<em>r</em>) 个盒子，<em>m</em> 个副本合计给出一个覆盖：</p>
+          <span class="formula">N(ε) ≤ m · N(ε r)</span>
+          <p><span class="stepnum">2</span><b>下界（副本分离）．</b>另一头：自相似集的两个副本之间有一道最小间隙 δ<sub>0</sub>。取 ε &lt; δ<sub>0</sub>，则<strong>任何一个 ε-盒最多只与一个副本相交</strong>，于是总数至少等于「分别覆盖每个副本」所需之和：</p>
+          <span class="formula">N(ε) ≥ m · N(ε r)</span>
+          <p><b>为什么是「下界」</b>：每个副本至少要 N(ε·<em>r</em>) 个盒子才盖得住；而 ε &lt; δ<sub>0</sub> 时盒子不能跨副本共用，所以总数不可能更少。<strong>代入康托尔核对</strong>：ε = 1/9 时 N = 4，右边 = 2·N(1/3) = 2·2 = 4 ✓。</p>
+          <p><span class="stepnum">3</span><b>夹住并取对数．</b>把第 1 步的上界与第 2 步的下界合起来：</p>
+          <span class="formula">m · N(ε r) ≤ N(ε) ≤ m · N(ε r)　⇒　N(ε) = m · N(ε r)</span>
+          <p>（严格说是相差一个 (1+o(1)) 因子。）迭代 n 次得 N(ε) ≈ m<sup>n</sup>N(ε r<sup>n</sup>)。取 ε r<sup>n</sup> = 1（即 n = ln(1/ε)/ln r）、令 n → ∞，常数项被 ln(1/ε) 除没，即得</p>
+          <span class="formula">D<sub>box</sub> = ln m / ln r</span>
+          <p><b>注意</b>：单靠上界迭代<strong>夹不出</strong>这个结果（只会给出 −ln(Km)/ln r 这样的负数）；真正把它夹住的是「副本分离」这条下界。这也是为什么<strong>开集条件必须成立</strong>——它保证副本之间确实留有间隙。</p>
+          <p><span class="stepnum">4</span><b>退化自检．</b>取 m = r<sup>d</sup>（普通 d 维方块）：D = ln(r<sup>d</sup>)/ln r = d ✓。取 m = 1（一个副本，即无自相似结构）：D = 0 ✓（一个点）。</p>
+          <p><b>失效边界．</b>① <strong>上界</strong>在副本轻微重叠时仍成立（只是常数变差）；真正脆弱的是<strong>下界</strong>——副本一重叠，一个 ε-盒就能同时统计两个副本，N(ε) ≥ mN(ε r) 不成立，两边的夹子松开，两个维数就可能不同。这就是「开集条件」非要求不可的原因。② 这个论证只给「盒维数 = 自相似维数」，<strong>不能推出关联维数</strong>：后者看的是测度（点怎么分布），不是集合本身。所以对非均匀吸引子，D₂ 与 D₀ 本来就不必相等（本章洛伦兹：D₂ ≈ 2.02、D₀ ≈ 1.81）。</p>
+        </div>
+      </details>
+    </div>
+    <div class="pfoot">§11.4 盒维数</div>
+  </section>
+
+  <!-- ========== 17 反例与边界 ========== -->
+  <section class="page" data-title="五个容易踩的坑">
+    <div class="page-inner">
+      <div class="a kicker">PITFALLS · 反例与边界</div>
+      <h2 class="a">五个容易踩的坑</h2>
+      <div class="split" style="margin-top:14px;gap:14px">
+        <div>
+          <div class="a card" style="margin-bottom:10px;border-color:rgba(217,83,74,.34)">
+            <h4 style="color:#ffb4a6">1　把维数当成「长得像几维」</h4>
+            <p>康托尔尘画出来像一片雾，维数 0.63；谢尔宾斯基三角有无数个洞，维数 1.58。维数是<strong>标度关系</strong>，不是形状描述。</p>
+          </div>
+          <div class="a card" style="margin-bottom:10px">
+            <h4>2　拿整数维的尺子硬套</h4>
+            <p>用长度量康托尔集得 0，用面积量得 0，用「点数」量得无穷。这些都不矛盾——只是那把尺子不适合。</p>
+          </div>
+          <div class="a card">
+            <h4>3　在错误的尺度上拟合</h4>
+            <p>盒计数的直线只在某个区间里直。把小 ε 端（点数不够）或大 ε 端（整体形状主导）算进去，斜率会系统性偏小。</p>
+          </div>
+        </div>
+        <div>
+          <div class="a card" style="margin-bottom:10px">
+            <h4>4　以为一个数就够</h4>
+            <p>D₀（盒）、D₁（信息）、D₂（关联）一般不同。报「洛伦兹吸引子的维数是 2」时要说明是哪一个、怎么测的。</p>
+          </div>
+          <div class="a card" style="margin-bottom:10px;border-color:rgba(232,176,75,.36)">
+            <h4 style="color:#f3d79a">5　把嵌入维数当吸引子维数</h4>
+            <p>你把三维数据画在二维纸上，量到的是「投影」的维数。第 12 章会用延迟嵌入说明：只要嵌入维数足够高，重构出来的吸引子维数才和原来一致。</p>
+          </div>
+          <div class="a card">
+            <h4>一句话总结边界</h4>
+            <p>维数是<strong>在给定尺度范围内</strong>测出来的一个数。这一章所有数字都带着「点数 / 尺度 / 拟合区间」三个前提，报数时必须一起报。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">§11.1–§11.5 回顾</div>
+  </section>
+
+  <!-- ========== 18 自测 ========== -->
+  <section class="page" data-title="自测">
+    <div class="page-inner">
+      <div class="a kicker">CHECK · 自测</div>
+      <h2 class="a" style="margin-bottom:14px">五道题</h2>
+      <div class="qs" id="quizbox"></div>
+      <div class="score" id="score"></div>
+      <label class="a done" id="donebox">
+        <input type="checkbox" id="doneChk">
+        <span>这一章读完了</span>
+      </label>
+    </div>
+    <div class="pfoot">—</div>
+  </section>
+
+  <!-- ========== 19 带走 ========== -->
+  <section class="page" data-title="带走三句话">
+    <div class="page-inner">
+      <div class="a kicker">TAKE AWAY · 三句话</div>
+      <h2 class="a">带走三句话</h2>
+      <div class="split" style="margin-top:18px">
+        <div>
+          <p class="a p"><strong>一、维数是「标度关系」，不是「坐标轴个数」。</strong><em>N</em>(ε) ∝ ε<sup>−D</sup> 定义了一切：直线给 1、面给 2、康托尔集给 0.6309。整数维只是它的特例。</p>
+          <p class="a p"><strong>二、自相似集能用公式算，奇怪吸引子只能量。</strong>规矩图形用 D = ln <em>m</em>/ln <em>r</em>（本章验算：康托尔 0.6309、科赫 1.2619、谢尔宾斯基 1.5850）；吸引子用盒计数或关联维数（洛伦兹：D₂ ≈ 2.02）。</p>
+          <p class="a p"><strong>三、报维数必须带前提。</strong>点数、尺度范围、拟合区间、以及是哪一个维数——换一个，第三位小数就变。洛伦兹的 1.81（盒，12 万点）与 2.02（关联，3000 点）就是活例子。做实验的人问「维数是多少」，等价于问「你在什么尺度上、用什么尺子量的」。</p>
+        </div>
+        <div class="a card" style="border-color:rgba(232,176,75,.36)">
+          <h4>回到本章开头的问题</h4>
+          <p style="line-height:1.95">「体积为零」为什么不是「不存在」？</p>
+          <p style="line-height:1.95">因为体积这把尺子在这个集合上失效。换个尺子（数盒子）就得到 <strong>2.02</strong> 这个中间值——它既不是三维、也不是二维，所以它「存在，但很薄」。</p>
+          <p style="line-height:1.95;color:#a9d9cf">下一章：这些分形集合是怎么被「拉伸 + 折叠」造出来的？埃农映射两步就能画出一片分形灰尘，若斯勒的一条带子则永远不闭合成面。</p>
+        </div>
+      </div>
+    </div>
+    <div class="pfoot">—</div>
+  </section>
+
+
+</main>
+
+<script>
+(function(){
+"use strict";
+var $=function(s,r){return (r||document).querySelector(s);};
+var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s));};
+var REDUCE=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+var C={text:"#8b95a4",gold:"#e8b04b",cyan:"#62d0ff",warm:"#ff9770",teal:"#4fbfa8",grid:"rgba(255,255,255,.06)"};
+
+/* ================= 翻页 ================= */
+var pages=$$(".page"), dotsBox=$("#dots"), rail=$("#rail"),
+    counter=$("#counter"), whereEl=$("#where"), tip=$("#tip");
+var idx=0, steps=[], lock=false;
+
+pages.forEach(function(p,i){
+  steps[i]=0;
+  var b=document.createElement("button");
+  b.setAttribute("aria-label","第 "+(i+1)+" 页");
+  b.innerHTML='<i></i>';
+  b.addEventListener("click",function(){ go(i); });
+  dotsBox.appendChild(b);
+});
+var dotEls=$$("#dots button");
+
+function setStep(pi,s){
+  steps[pi]=s;
+  var page=pages[pi];
+  $$(".step",page).forEach(function(el,k){ el.classList.toggle("on",k===s); });
+  $$(".sdots i",page).forEach(function(el,k){ el.classList.toggle("on",k===s); });
+  var hook=page.getAttribute("data-hook");
+  if(hook==="flow"&&window.NDC1) window.NDC1.pick(s);
+  if(hook==="pend"&&window.NDC2) window.NDC2.setGamma([0,0.22,0.75][s]);
+  if(hook==="lorenz"&&window.NDC4) window.NDC4.setDelta([1e-2,1e-5,1e-9][s]);
+}
+function paint(){
+  for(var i=0;i<pages.length;i++) pages[i].classList.toggle("on",i===idx);
+  for(var k=0;k<dotEls.length;k++) dotEls[k].classList.toggle("on",k===idx);
+  rail.style.width=(((idx+1)/pages.length)*100).toFixed(2)+"%";
+  counter.innerHTML="<b>"+String(idx+1).padStart(2,"0")+"</b> / "+pages.length;
+  whereEl.innerHTML="<b>"+(pages[idx].getAttribute("data-title")||"")+"</b>";
+}
+function go(i){
+  if(i<0||i>=pages.length) return;
+  idx=i;
+  var inner=$(".page-inner",pages[idx]);
+  if(inner) inner.scrollTop=0;
+  if(window.__FITS) window.__FITS.forEach(function(fn){ try{ fn(); }catch(e){} });
+  paint();
+  setStep(idx,0);
+  if(idx>0) tip.classList.add("hide");
+}
+function next(){
+  var p=pages[idx], n=parseInt(p.getAttribute("data-steps")||"0",10), s=steps[idx]||0;
+  if(n>0&&s<n-1){ setStep(idx,s+1); return; }
+  if(idx<pages.length-1) go(idx+1);
+}
+function prev(){
+  var p=pages[idx], n=parseInt(p.getAttribute("data-steps")||"0",10), s=steps[idx]||0;
+  if(n>0&&s>0){ setStep(idx,s-1); return; }
+  if(idx>0) go(idx-1);
+}
+function innerEdge(dir){
+  var inner=pages[idx]&&$(".page-inner",pages[idx]);
+  if(!inner||inner.scrollHeight<=inner.clientHeight+4) return true;
+  if(dir>0) return inner.scrollTop+inner.clientHeight>=inner.scrollHeight-6;
+  return inner.scrollTop<=3;
+}
+paint(); setStep(0,0);
+
+window.addEventListener("wheel",function(e){
+  if(lock) return;
+  if(Math.abs(e.deltaY)<8) return;
+  var dir=e.deltaY>0?1:-1;
+  if(!innerEdge(dir)) return;
+  lock=true;
+  if(dir>0) next(); else prev();
+  window.setTimeout(function(){ lock=false; }, 620);
+},{passive:true});
+
+window.addEventListener("keydown",function(e){
+  var k=e.key;
+  if(k==="ArrowDown"||k==="ArrowRight"||k===" "||k==="PageDown"||k==="Enter"){ e.preventDefault(); next(); }
+  else if(k==="ArrowUp"||k==="ArrowLeft"||k==="PageUp"){ e.preventDefault(); prev(); }
+  else if(k==="Home"){ e.preventDefault(); go(0); }
+  else if(k==="End"){ e.preventDefault(); go(pages.length-1); }
+});
+
+var ty=null;
+window.addEventListener("touchstart",function(e){ ty=e.touches[0].clientY; },{passive:true});
+window.addEventListener("touchend",function(e){
+  if(ty===null) return;
+  var dy=ty-e.changedTouches[0].clientY;
+  if(Math.abs(dy)>46){ dy>0?next():prev(); }
+  ty=null;
+},{passive:true});
+
+/* ================= 画布工具 ================= */
+function makeCanvas(cv){
+  var ctx=cv.getContext("2d");
+  var dpr=Math.min(window.devicePixelRatio||1,2);
+  var h0=parseInt(cv.getAttribute("height"),10)||330;
+  var w=cv.clientWidth||600, h=h0;
+  function fit(){
+    w=cv.clientWidth||600;
+    cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
+    cv.style.height=h+"px";
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  fit(); window.addEventListener("resize",fit);
+  window.__FITS=window.__FITS||[]; window.__FITS.push(fit);
+  return {ctx:ctx,fit:fit,w:function(){return w;},h:function(){return h;}};
+}
+function loop(cv,fn){
+  function tick(){
+    try{
+      var pg=cv.closest(".page");
+      if(!pg||pg.classList.contains("on")) fn();
+    }catch(e){ /* 单帧出错不中断动画循环 */ }
+    window.requestAnimationFrame(tick);
+  }
+  window.requestAnimationFrame(tick);
+}
+function tip(ctx,txt,x,y,color,size,align){
+  ctx.fillStyle=color||C.text;
+  ctx.font=(size||11)+'px "PingFang SC","Microsoft YaHei",sans-serif';
+  ctx.textAlign=align||"left";
+  ctx.fillText(txt,x,y);
+}
+
+
+/* ================= 演示 01 · 盒计数：数盒子 ================= */
+(function(){
+  var cv=$("#cv1"); if(!cv) return;
+  var U=makeCanvas(cv), ctx=U.ctx;
+  var LEVEL=5, eps=1.0/9.0;
+  var hist=[];              /* 已记录的点 [log(1/eps), log N] */
+
+  function cantor(level){
+    var segs=[[0,1]];
+    for(var i=0;i<level;i++){
+      var nx=[];
+      for(var k=0;k<segs.length;k++){
+        var d=(segs[k][1]-segs[k][0])/3.0;
+        nx.push([segs[k][0],segs[k][0]+d]);
+        nx.push([segs[k][1]-d,segs[k][1]]);
+      }
+      segs=nx;
+    }
+    return segs;
+  }
+  var SEGS=cantor(LEVEL);
+  function countBoxes(e){
+    var seen={}, n=0;
+    for(var k=0;k<SEGS.length;k++){
+      var id=Math.floor(SEGS[k][0]/e+1e-9);
+      if(!seen[id]){ seen[id]=1; n++; }
+    }
+    return n;
+  }
+
+  function draw(){
+    var w=U.w(), h=U.h(), i;
+    ctx.clearRect(0,0,w,h);
+    var X0=34, X1=w-16, Y=96;
+    /* 盒子（竖条） */
+    var nb=Math.round(1/eps);
+    if(nb<=120){
+      ctx.strokeStyle="rgba(255,255,255,.10)"; ctx.lineWidth=1;
+      for(i=0;i<=nb;i++){
+        var px=X0+(X1-X0)*i/nb;
+        ctx.beginPath(); ctx.moveTo(px,60); ctx.lineTo(px,132); ctx.stroke();
+      }
+    }
+    /* 康托尔集 */
+    for(i=0;i<SEGS.length;i++){
+      var a=X0+(X1-X0)*SEGS[i][0], b=X0+(X1-X0)*SEGS[i][1];
+      ctx.fillStyle="#62d0ff";
+      ctx.fillRect(a,Y-5,Math.max(1,b-a-0.6),10);
+    }
+    tip(ctx,"康托尔集（第 "+LEVEL+" 级）",X0,44,C.text,10.5);
+    tip(ctx,"盒子边长 ε = 1/"+Math.round(1/eps)+"　占用 "+countBoxes(eps)+" 个",X0,58,C.gold,10.5);
+
+    /* 右下：log-log 小图 */
+    var gx0=w*0.55, gx1=w-16, gy0=h-28, gy1=h-118;
+    ctx.strokeStyle="rgba(255,255,255,.26)"; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(gx0,gy0); ctx.lineTo(gx1,gy0); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(gx0,gy0); ctx.lineTo(gx0,gy1); ctx.stroke();
+    tip(ctx,"log(1/ε)",gx1-4,gy0+14,C.text,9,"right");
+    tip(ctx,"log N",gx0+2,gy1-4,C.text,9,"left");
+    var j, minX=1.0, maxX=4.6, minY=0.0, maxY=3.2;
+    function mx(v){ return gx0+(v-minX)/(maxX-minX)*(gx1-gx0); }
+    function my(v){ return gy0-(v-minY)/(maxY-minY)*(gy0-gy1); }
+    ctx.strokeStyle="rgba(232,176,75,.55)"; ctx.setLineDash([4,3]);
+    var SL=Math.log(2)/Math.log(3);
+    ctx.beginPath(); ctx.moveTo(mx(minX),my(SL*minX)); ctx.lineTo(mx(maxX),my(SL*maxX)); ctx.stroke();
+    ctx.setLineDash([]);
+    for(j=0;j<hist.length;j++){
+      ctx.beginPath(); ctx.arc(mx(hist[j][0]),my(hist[j][1]),3,0,Math.PI*2);
+      ctx.fillStyle="#62d0ff"; ctx.fill();
+    }
+    tip(ctx,"金虚线斜率 = ln2/ln3 = 0.631",gx0+4,gy1+12,"rgba(139,149,164,.95)",9,"left");
+
+    var ro=$("#ro1");
+    if(ro){
+      var N=countBoxes(eps);
+      var slope="—";
+      if(hist.length>1){
+        var p0=hist[hist.length-2], p1=hist[hist.length-1];
+        if(p1[0]!==p0[0]) slope=((p1[1]-p0[1])/(p1[0]-p0[0])).toFixed(3);
+      }
+      ro.innerHTML="ε = <b>1/"+Math.round(1/eps)+"</b>　N = <b>"+N+"</b>　log(1/ε) = <b>"+
+        Math.log(1/eps).toFixed(2)+"</b>　log N = <b>"+Math.log(N).toFixed(2)+
+        "</b>　最近一段斜率 ≈ <b>"+slope+"</b>";
+    }
+  }
+
+  function setEps(e){
+    eps=e;
+    hist=[];
+    var nb=Math.round(1/eps);
+    for(var k=1;k<=Math.log(nb)/Math.log(3)+0.001;k++){
+      var ne=Math.pow(3,k);
+      hist.push([Math.log(ne), Math.log(countBoxes(1/ne))]);
+    }
+    var sl=$("#p1"), sv=$("#p1v");
+    if(sl) sl.value=String(Math.round(Math.log(nb)/Math.log(3)));
+    if(sv) sv.textContent="1/"+nb;
+  }
+
+  loop(cv,draw);
+
+  var sl1=$("#p1");
+  if(sl1) sl1.addEventListener("input",function(){
+    var k=parseInt(sl1.value,10);
+    setEps(Math.pow(3,-k));
+  });
+  var rb1=$("#reset1");
+  if(rb1) rb1.addEventListener("click",function(){ setEps(1.0/9.0); });
+
+  window.NDC_BOX={set:function(k){ setEps(Math.pow(3,-k)); }};
+  setEps(1.0/9.0);
+})();
+
+/* ================= 演示 02 · 混沌游戏：k 个映射，维数 ln k / ln 2 ================= */
+(function(){
+  var cv=$("#cv2"); if(!cv) return;
+  var U=makeCanvas(cv), ctx=U.ctx;
+  var K=3, x=0.37, y=0.11, pts=[], last=-1;
+
+  function verts(k){
+    var out=[], i;
+    if(k===2){ return [[0.1,0.5],[0.9,0.5]]; }
+    if(k===3){
+      for(i=0;i<3;i++){ var a=-Math.PI/2+i*2*Math.PI/3; out.push([0.5+0.42*Math.cos(a),0.55+0.42*Math.sin(a)]); }
+      return out;
+    }
+    for(i=0;i<4;i++){ var b=Math.PI/4+i*Math.PI/2; out.push([0.5+0.38*Math.cos(b),0.5+0.38*Math.sin(b)]); }
+    return out;
+  }
+
+  function step(n){
+    var V=verts(K);
+    for(var i=0;i<n;i++){
+      var k=Math.floor(Math.random()*K);
+      x=(x+V[k][0])/2.0; y=(y+V[k][1])/2.0;
+      last=k;
+      pts.push([x,y]);
+      if(pts.length>40000) pts.shift();
+    }
+  }
+
+  function draw(){
+    var w=U.w(), h=U.h(), i;
+    ctx.clearRect(0,0,w,h);
+    var S=Math.min(w-40,h-60), ox=(w-S)/2, oy=(h-S)/2+8;
+    function px(q){ return [ox+q[0]*S, oy+(1-q[1])*S]; }
+    var V=verts(K);
+    ctx.strokeStyle="rgba(255,255,255,.20)"; ctx.lineWidth=1;
+    for(i=0;i<K;i++){
+      var p1=px(V[i]), p2=px(V[(i+1)%K]);
+      ctx.beginPath(); ctx.moveTo(p1[0],p1[1]); ctx.lineTo(p2[0],p2[1]); ctx.stroke();
+      ctx.beginPath(); ctx.arc(p1[0],p1[1],3.2,0,Math.PI*2); ctx.fillStyle="rgba(255,151,112,.9)"; ctx.fill();
+    }
+    for(i=0;i<pts.length;i++){
+      var q=px(pts[i]);
+      ctx.fillStyle="rgba(98,208,255,.55)";
+      ctx.fillRect(q[0],q[1],1.2,1.2);
+    }
+    tip(ctx,"K = "+K+" 个压缩映射（各缩一半）",ox,oy-8,C.gold,10.5);
+    var ro=$("#ro2");
+    if(ro){
+      var D=Math.log(K)/Math.log(2);
+      ro.innerHTML="K = <b>"+K+"</b>　点 <b>"+pts.length+
+        "</b>　自相似维数 D = ln K / ln 2 = <b>"+D.toFixed(3)+"</b>　"+
+        (K===2?"（一条线段：D = 1）":K===3?"（谢尔宾斯基三角形）":"（一个实心方块：D = 2）");
+    }
+  }
+
+  loop(cv,function(){ step(6); draw(); });
+
+  function setK(v){
+    K=v; pts=[]; x=0.37; y=0.11; step(400);
+    var sl=$("#p2"), sv=$("#p2v");
+    if(sl) sl.value=v; if(sv) sv.textContent=String(v);
+  }
+  var sl2=$("#p2");
+  if(sl2) sl2.addEventListener("input",function(){ setK(parseInt(sl2.value,10)); });
+  var rb2=$("#reset2");
+  if(rb2) rb2.addEventListener("click",function(){ pts=[]; step(400); });
+
+  window.NDC_GAME={set:function(v){ setK(v); }};
+})();
+
+/* ================= 三拍与外壳的同步 ================= */
+(function(){
+  var MAP={boxcount:"NDC_BOX", chaosgame:"NDC_GAME"};
+  var BEATS={boxcount:[2,3,4], chaosgame:[2,3,4]};
+  function stepOf(pg){
+    var ss=$$(".step",pg), k=0, i;
+    for(i=0;i<ss.length;i++){ if(ss[i].classList.contains("on")) k=i; }
+    return k;
+  }
+  var lastKey="";
+  function sync(){
+    var pg=$(".page.on"); if(!pg) return;
+    var hook=pg.getAttribute("data-hook"); if(!hook) return;
+    var api=window[MAP[hook]]; if(!api) return;
+    var k=stepOf(pg), key=hook+"#"+k;
+    if(key===lastKey) return;
+    lastKey=key;
+    var bs=BEATS[hook];
+    if(bs) api.set(bs[k<bs.length?k:bs.length-1]);
+  }
+  var deck=$("#deck"); if(!deck) return;
+  if(window.MutationObserver){
+    var mo=new MutationObserver(sync);
+    mo.observe(deck,{attributes:true,attributeFilter:["class"],subtree:true});
+  } else {
+    window.setInterval(sync,320);
+  }
+  window.setTimeout(sync,80);
+})();
+
+
+
+/* ================= 小测 ================= */
+(function(){
+  var box=$("#quizbox"); if(!box) return;
+  var QS=[
+    {q:"康托尔集的总长度是 0，但它有多少个点？",
+     o:["只有两个端点","可数个点","不可数：和整个区间一样多","无穷多个但可数"],a:2,
+     w:"三进制里只含 0 和 2 的展开与 [0,1] 的二进制序列一一对应，所以它与整个区间等势（不可数）。长度为零 ≠ 点很少。"},
+    {q:"一个自相似集合由 m = 4 个副本组成，每个是原来的 1/3 大，维数是？",
+     o:["ln3/ln4 ≈ 0.79","ln4/ln3 ≈ 1.262","4/3 ≈ 1.33","log₂4 = 2"],a:1,
+     w:"D = ln m / ln r = ln4/ln3 ≈ 1.262（科赫曲线就是这个数）。整数维对象会自动退回整数。"},
+    {q:"盒计数的定义里，N(ε) ∝ ε^(−D)。盒维数怎么读出来？",
+     o:["取 N 的最大值","画 log N 对 log(1/ε) 的图，取直线斜率","取 ε = 1 时的 N","数盒子的边长"],a:1,
+     w:"双对数下是直线，斜率就是 D。本章康托尔集实测 0.6309，与 ln2/ln3 逐位一致。"},
+    {q:"关联维数 D₂ 与盒维数 D₀ 为什么可能不同？",
+     o:["因为算错了","因为 D₂ 由点对分布（测度）决定，D₀ 只看集合本身；非均匀时二者不等","因为 D₂ 总是更大","因为 D₀ 只对整数维有效"],a:1,
+     w:"一般 D₂ ≤ D₁ ≤ D₀。本章洛伦兹：盒维数（12 万点）测得 1.81，关联维数（3000 点）2.02。"},
+    {q:"在洛伦兹吸引子上量出「点态维数」是一个分布，这说明？",
+     o:["维数没有定义","吸引子上的点分布不均匀，各处的局部标度指数不同","数值方法失效","吸引子其实是二维面"],a:1,
+     w:"本章 200 个采样点的 α 中位数 1.95、范围 1.52–3.25。非均匀正是「奇怪」的一部分，也是单用 D₀ 不够的原因。"}
+  
+  ];
+  var KEY="ndc11-quiz", DKEY="ndc11-done";
+  var saved={}, score=0, answered=0;
+  try{ saved=JSON.parse(localStorage.getItem(KEY)||"{}"); }catch(e){ saved={}; }
+
+  QS.forEach(function(item,qi){
+    var w=document.createElement("div"); w.className="q";
+    var stem=document.createElement("div"); stem.className="stem"; stem.textContent="Q"+(qi+1)+"　"+item.q;
+    var opts=document.createElement("div");
+    var fb=document.createElement("div"); fb.className="fb";
+    w.appendChild(stem); w.appendChild(opts); w.appendChild(fb);
+    item.o.forEach(function(txt,oi){
+      var d=document.createElement("div"); d.className="opt";
+      var k=document.createElement("span"); k.className="k"; k.textContent=String.fromCharCode(65+oi);
+      var s=document.createElement("span"); s.textContent=txt;
+      d.appendChild(k); d.appendChild(s);
+      d.addEventListener("click",function(){
+        if(opts.getAttribute("data-locked")==="1") return;
+        opts.setAttribute("data-locked","1");
+        var ok=oi===item.a;
+        Array.prototype.forEach.call(opts.children,function(c,ci){
+          c.classList.add("locked");
+          if(ci===item.a) c.classList.add("right");
+        });
+        if(!ok) d.classList.add("wrong");
+        fb.textContent=(ok?"答对了。":"再看一眼。")+item.w;
+        fb.className="fb show"+(ok?"":" bad");
+        answered++; if(ok) score++;
+        saved[qi]=oi;
+        try{ localStorage.setItem(KEY,JSON.stringify(saved)); }catch(e){}
+        paintScore();
+      });
+      opts.appendChild(d);
+    });
+    if(saved[qi]!==undefined){
+      var oi2=saved[qi];
+      opts.setAttribute("data-locked","1");
+      Array.prototype.forEach.call(opts.children,function(c,ci){
+        c.classList.add("locked");
+        if(ci===item.a) c.classList.add("right");
+      });
+      if(oi2!==item.a) opts.children[oi2].classList.add("wrong");
+      fb.textContent=(oi2===item.a?"答对了。":"再看一眼。")+item.w;
+      fb.className="fb show"+(oi2===item.a?"":" bad");
+    }
+    box.appendChild(w);
+  });
+  function paintScore(){
+    var el=$("#score"); if(!el) return;
+    if(!answered){ el.innerHTML="共 5 题 · 点选项立刻判对错"; return; }
+    el.innerHTML="已作答 <b>"+answered+"</b> / 5　答对 <b>"+score+"</b> 题　"+
+      (score===5?"全对，这一章过关了。":score>=3?"基本到位，错的那几道回看解析。":"建议回去把演示再做一遍。");
+  }
+  paintScore();
+  var chk=$("#doneChk"), boxD=$("#donebox");
+  try{ chk.checked=localStorage.getItem(DKEY)==="1"; }catch(e){}
+  if(chk) chk.addEventListener("change",function(){
+    try{ localStorage.setItem(DKEY,chk.checked?"1":"0"); }catch(e){}
+    if(boxD) boxD.style.background=chk.checked?"rgba(79,191,168,.16)":"";
+  });
+})();
+
+/* 四个演示都就绪后，把当前页（含步骤）对齐一次，保证首屏与第 1 步一致 */
+setStep(idx,steps[idx]||0);
+})();
+</script>
+
+</body>
+</html>
